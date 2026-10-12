@@ -14,11 +14,6 @@
   letter-spacing: -0.015em;
   color: var(--ink);
 }
-.scan-summary__scope {
-  margin-left: auto;
-  font-size: 12.5px;
-  color: var(--ink-muted);
-}
 
 .scan-summary__tiles {
   display: grid;
@@ -110,10 +105,6 @@
   }
   .scan-summary__head {
     flex-wrap: nowrap;
-  }
-  .scan-summary__scope {
-    font-size: 11.5px;
-    text-align: right;
   }
   .scan-summary__tiles {
     gap: 6px;

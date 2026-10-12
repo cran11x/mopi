@@ -7,7 +7,7 @@
 .home__stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 40px;
 }
 
 /* Responsive copy swaps (one of each pair is display:none, so assistive tech
@@ -74,7 +74,7 @@
       'form form'
       'summary summary'
       'accounts accounts'
-      'preview explains';
+      'preview preview';
     row-gap: 0;
   }
   .home__panel {
@@ -86,10 +86,6 @@
   }
   .home__preview {
     grid-area: preview;
-    margin-top: 12px;
-  }
-  .home__explains {
-    grid-area: explains;
     margin-top: 12px;
   }
 }
@@ -106,7 +102,6 @@
   .home__stack {
     gap: 12px;
   }
-  .home__steps,
   .home__how,
   .home__holder {
     display: none;
@@ -118,8 +113,7 @@
       'form'
       'summary'
       'preview'
-      'accounts'
-      'explains';
+      'accounts';
     row-gap: 12px;
   }
   .home__panel {
@@ -130,8 +124,7 @@
   .home__accounts {
     padding: 0;
   }
-  .home__preview,
-  .home__explains {
+  .home__preview {
     margin-top: 0;
   }
 }

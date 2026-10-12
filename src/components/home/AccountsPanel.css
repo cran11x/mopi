@@ -229,23 +229,6 @@
   transform: rotate(-90deg);
 }
 
-.accounts__note {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 6px;
-  padding: 9px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--bg-soft);
-  font-size: 12.5px;
-  color: var(--ink-muted);
-}
-.accounts__note svg {
-  flex: none;
-  color: var(--ink-2);
-}
-
 /* ---------- Empty / prompt states ---------- */
 .accounts__empty {
   display: flex;
@@ -502,9 +485,6 @@
   }
   .accounts__count {
     font-size: 12px;
-  }
-  .accounts__note {
-    display: none;
   }
   .accounts__empty {
     flex-direction: column;

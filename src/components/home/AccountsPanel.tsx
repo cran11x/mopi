@@ -70,11 +70,6 @@ export function AccountsPanel({ className }: { className?: string }) {
           <SkippedTable scan={scan} expanded={expanded} onToggleExpanded={() => setExpanded((v) => !v)} />
         )}
       </div>
-
-      <p className="accounts__note">
-        <Icon name="info" size={18} />
-        Accounts with tokens are skipped.
-      </p>
     </div>
   )
 }

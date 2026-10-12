@@ -1,11 +1,9 @@
 import { Suspense, lazy } from 'react'
 import { Hero } from '../components/home/Hero'
-import { StepsStrip } from '../components/home/StepsStrip'
 import { ScanForm } from '../components/home/ScanForm'
 import { ScanSummary } from '../components/home/ScanSummary'
 import { AccountsPanel } from '../components/home/AccountsPanel'
 import { PreviewCard } from '../components/home/PreviewCard'
-import { ExplainsCard } from '../components/home/ExplainsCard'
 import { HowStrip } from '../components/home/HowStrip'
 import { HolderBanner } from '../components/home/HolderBanner'
 import { useCleaner } from '../state/cleaner'
@@ -36,8 +34,6 @@ export function HomePage() {
       </div>
 
       <div className="container home__stack">
-        <StepsStrip className="home__steps" />
-
         <section className="home__main" aria-labelledby="scan-heading">
           <div className="home__panel" aria-hidden="true" />
           <ScanForm className="home__form" />
@@ -45,7 +41,6 @@ export function HomePage() {
           <AccountsPanel className="home__accounts" />
           <div className="home__side">
             <PreviewCard className="home__preview" />
-            <ExplainsCard className="home__explains" />
           </div>
         </section>
 

@@ -16,6 +16,7 @@
   grid-row: 1;
   min-width: 0;
   padding-left: 22px;
+  align-self: center;
 }
 
 .hero__eyebrow {
@@ -50,34 +51,6 @@
   letter-spacing: -0.01em;
   color: var(--ink-2);
   max-width: 40em;
-}
-
-.hero__features {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 20px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.hero__feature {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  height: 42px;
-  padding: 0 22px 0 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ink-2);
-  white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-}
-.hero__feature svg {
-  color: var(--forest-strong);
-  flex: none;
 }
 
 /* ---------- Scene: art box keeps the 640×520 ratio; overlays are in % ---------- */
@@ -138,31 +111,6 @@
   transform: rotate(30deg) skewX(-14deg);
 }
 
-.hero-scene__tag {
-  position: absolute;
-  z-index: 1;
-  padding: 0.45em 0.9em;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--surface);
-  color: var(--ink-2);
-  font-size: clamp(11px, 0.95vw, 13px);
-  font-weight: 500;
-  line-height: 1.2;
-  white-space: nowrap;
-  box-shadow: 0 4px 12px -6px rgba(18, 26, 22, 0.18);
-}
-.hero-scene__tag--tokens {
-  right: 9%;
-  top: 42%;
-  transform: rotate(-3deg);
-}
-.hero-scene__tag--empty {
-  right: -1%;
-  top: 51.5%;
-  transform: rotate(2.5deg);
-}
-
 @keyframes hero-float {
   0%,
   100% {
@@ -192,42 +140,10 @@
   .hero {
     grid-template-columns: minmax(0, 1fr) minmax(0, 40%);
   }
-  .hero__features {
-    gap: 8px;
-  }
-  .hero__feature {
-    height: 40px;
-    padding: 0 16px 0 12px;
-    gap: 10px;
-    font-size: 13.5px;
-  }
 }
 
 /* Smaller desktops + tablet: the scene shrinks but the tags keep their pixel size,
    so anchor them from the left edge of the art's empty overlay zone (x480–640 = 75–100%). */
-@media (min-width: 721px) and (max-width: 1240px) {
-  .hero-scene__tag {
-    font-size: 11px;
-  }
-  .hero-scene__tag--tokens {
-    right: auto;
-    left: 76%;
-    top: 37%;
-  }
-  .hero-scene__tag--empty {
-    right: auto;
-    left: 73%;
-    top: 49%;
-  }
-}
-@media (min-width: 721px) and (max-width: 1023px) {
-  .hero-scene__tag--empty {
-    display: none;
-  }
-  .hero-scene__tag--tokens {
-    top: 40%;
-  }
-}
 
 /* ---------- Tablet ---------- */
 @media (max-width: 1023px) {
@@ -239,15 +155,6 @@
   }
   .hero__sub {
     font-size: 16px;
-  }
-  .hero__features {
-    gap: 6px;
-  }
-  .hero__feature {
-    height: 36px;
-    padding: 0 12px 0 10px;
-    font-size: 12.5px;
-    gap: 6px;
   }
   .hero-scene {
     margin-top: 0;
@@ -261,18 +168,6 @@
   .hero__eyebrow {
     font-size: 11px;
     letter-spacing: 0.16em;
-  }
-  .hero__features {
-    margin-top: 20px;
-    /* keep the three chips on one row instead of an accidental 2 + 1 wrap */
-    flex-wrap: nowrap;
-  }
-  .hero__feature {
-    padding: 0 10px;
-    font-size: 12px;
-  }
-  .hero__feature svg {
-    display: none;
   }
   .hero-scene {
     align-self: center;
@@ -301,9 +196,6 @@
     line-height: 1.45;
     letter-spacing: -0.012em;
   }
-  .hero__features {
-    display: none;
-  }
   .hero-scene {
     grid-column: 1;
     grid-row: 2;
@@ -321,17 +213,6 @@
     right: auto;
     left: 18%;
     transform: rotate(60deg) skewX(14deg);
-  }
-  .hero-scene__tag {
-    font-size: 11px;
-  }
-  .hero-scene__tag--tokens {
-    right: auto;
-    left: -8%;
-    top: 54%;
-  }
-  .hero-scene__tag--empty {
-    display: none;
   }
 }
 

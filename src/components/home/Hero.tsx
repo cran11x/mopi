@@ -1,12 +1,5 @@
-import { Icon, type IconName } from '../ui'
 import { Mascot } from '../mascot/Mascot'
 import './Hero.css'
-
-const FEATURES: Array<{ icon: IconName; label: string }> = [
-  { icon: 'search', label: 'Public address scan' },
-  { icon: 'shield', label: 'Wallet-approved' },
-  { icon: 'doc', label: 'Fees shown first' },
-]
 
 export function Hero() {
   return (
@@ -18,14 +11,6 @@ export function Hero() {
           <span className="hero__line hero__line--green">Get your SOL back.</span>
         </h1>
         <p className="hero__sub">Find empty token accounts. Review the fees. Return their account SOL to your wallet.</p>
-        <ul className="hero__features" aria-label="How mopi works">
-          {FEATURES.map((f) => (
-            <li key={f.label} className="hero__feature">
-              <Icon name={f.icon} size={20} />
-              {f.label}
-            </li>
-          ))}
-        </ul>
       </div>
 
       <HeroScene />
@@ -44,12 +29,6 @@ function HeroScene() {
         Found a <br />
         little SOL.
       </p>
-      <span className="hero-scene__tag hero-scene__tag--tokens" aria-hidden="true">
-        0 tokens
-      </span>
-      <span className="hero-scene__tag hero-scene__tag--empty" aria-hidden="true">
-        empty account
-      </span>
     </div>
   )
 }
