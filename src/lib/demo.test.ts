@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { DEMO_OWNER, TOKEN_ACCOUNT_RENT_LAMPORTS, createDemoScan, demoFeeConfig, isDemoAddress } from './demo'
+import {
+  DEMO_OWNER,
+  TOKEN_ACCOUNT_RENT_LAMPORTS,
+  createDemoScan,
+  demoFeeConfig,
+  isDemoAddress,
+  isExampleServiceFee,
+} from './demo'
 import { buildQuote } from './solana/fees'
 import { testFeeConfig } from '../test/solanaFixtures'
 
@@ -40,6 +47,14 @@ describe('demo scan', () => {
     expect(q.reclaimLamports).toBe(24 * TOKEN_ACCOUNT_RENT_LAMPORTS)
     expect(q.batches).toHaveLength(2)
     expect(q.serviceFeeLamports).toBeGreaterThan(0)
+  })
+
+  it('marks the demo fee as an example only when this deployment has no fee wallet', () => {
+    const none = demoFeeConfig(testFeeConfig({ feeWallet: null }), false)
+    expect(isExampleServiceFee(none)).toBe(true)
+    const real = demoFeeConfig(testFeeConfig({ feeWallet: '11111111111111111111111111111111' }), false)
+    expect(isExampleServiceFee(real)).toBe(false)
+    expect(isExampleServiceFee(testFeeConfig({ feeWallet: null }))).toBe(false)
   })
 
   it('isDemoAddress', () => {

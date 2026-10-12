@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { CLUSTER_LABELS } from '../../config'
 import type { Cluster } from '../../lib/types'
 import { useCluster } from '../../state/cluster'
@@ -11,23 +10,12 @@ const CLUSTERS: Array<{ key: Cluster; hint: string }> = [
   { key: 'devnet', hint: 'Test network, free SOL' },
 ]
 
-// Switching cluster remounts the wallet providers (and this component), so
-// remember which trigger to refocus once the new tree mounts.
-let refocusVariant: 'pill' | 'icon' | null = null
-
 /** Network picker. `pill` = desktop header, `icon` = square mobile button. */
 export function NetworkSelect({ variant = 'pill' }: { variant?: 'pill' | 'icon' }) {
   const { cluster, setCluster } = useCluster()
   const dd = useDropdown()
   const isDevnet = cluster === 'devnet'
   const menuId = `network-menu-${variant}`
-
-  useEffect(() => {
-    if (refocusVariant !== variant) return
-    refocusVariant = null
-    dd.triggerRef.current?.focus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   return (
     <div className="hmenu" ref={dd.rootRef}>
@@ -72,11 +60,9 @@ export function NetworkSelect({ variant = 'pill' }: { variant?: 'pill' | 'icon' 
                 tabIndex={-1}
                 className="hmenu__item"
                 onClick={() => {
+                  // The provider tree is not remounted on a switch; close(true) refocuses the trigger.
                   dd.close(true)
-                  if (!active) {
-                    refocusVariant = variant
-                    setCluster(key)
-                  }
+                  if (!active) setCluster(key)
                 }}
               >
                 <SolanaMark size={18} />

@@ -56,9 +56,30 @@ export function ordinal2(n: number): string {
   return String(n).padStart(2, '0')
 }
 
+const TOKEN_FRACTION_DIGITS = 6
+
+/**
+ * Token balance for display: grouped integer part, at most 6 decimals.
+ * Works on the decimal string (no float rounding past 2^53), and a tiny
+ * non-zero balance shows as "<0.000001", never as "0".
+ */
 export function formatTokenAmount(uiAmount: string): string {
-  const n = Number(uiAmount)
-  if (!Number.isFinite(n)) return uiAmount
-  if (n === 0) return '0'
-  return n.toLocaleString('en-US', { maximumFractionDigits: 6 })
+  const t = uiAmount.trim()
+  const m = /^(\d+)(?:\.(\d*))?$/.exec(t)
+  if (!m) {
+    // e.g. exponent notation; fall back to Number.
+    const n = Number(t)
+    if (!Number.isFinite(n)) return uiAmount
+    if (n === 0) return '0'
+    if (Math.abs(n) < 10 ** -TOKEN_FRACTION_DIGITS) return `<0.${'0'.repeat(TOKEN_FRACTION_DIGITS - 1)}1`
+    return n.toLocaleString('en-US', { maximumFractionDigits: TOKEN_FRACTION_DIGITS })
+  }
+  const int = m[1].replace(/^0+(?=\d)/, '')
+  const fullFraction = m[2] ?? ''
+  const fraction = fullFraction.slice(0, TOKEN_FRACTION_DIGITS).replace(/0+$/, '')
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  if (int === '0' && !fraction) {
+    return /[1-9]/.test(fullFraction) ? `<0.${'0'.repeat(TOKEN_FRACTION_DIGITS - 1)}1` : '0'
+  }
+  return fraction ? `${grouped}.${fraction}` : grouped
 }

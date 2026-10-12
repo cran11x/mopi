@@ -158,6 +158,10 @@
   .card--pad {
     padding: 16px;
   }
+  /* phones: small buttons still get a 40px tap target */
+  .btn--sm {
+    --btn-h: 40px;
+  }
 }
 
 /* ---------- Checkbox ---------- */
@@ -193,7 +197,8 @@
   border-color: var(--btn);
 }
 .checkbox input:focus-visible + .checkbox__box {
-  box-shadow: var(--focus-ring);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 .checkbox input:disabled + .checkbox__box {
   opacity: 0.45;
@@ -274,6 +279,9 @@
   padding: 16px 24px 24px;
 }
 @media (max-width: 720px) {
+  .tab {
+    height: 40px;
+  }
   .modal-backdrop {
     place-items: end center;
     padding: 0;
@@ -286,7 +294,7 @@
     padding: 18px 16px 0;
   }
   .modal__body {
-    padding: 14px 16px 20px;
+    padding: 14px 16px calc(20px + env(safe-area-inset-bottom, 0px));
   }
 }
 @keyframes mopi-fade {
@@ -307,6 +315,7 @@
   display: inline-flex;
 }
 .tip__trigger {
+  position: relative;
   display: inline-grid;
   place-items: center;
   padding: 0;
@@ -314,6 +323,12 @@
   background: none;
   color: var(--ink-faint);
   border-radius: 50%;
+}
+/* invisible 40px hit area around the 16px icon; the layout keeps the small glyph */
+.tip__trigger::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
 }
 .tip__trigger:hover {
   color: var(--ink-muted);

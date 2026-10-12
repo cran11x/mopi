@@ -49,6 +49,29 @@
   margin-right: -4px;
 }
 
+/* Desktop (mockup): mopi pokes out of the card — ears above the top border,
+   feet cut by the bottom edge — and the copy gets the full width beside it. */
+@media (min-width: 1024px) {
+  .explains {
+    min-height: 126px;
+    overflow: visible;
+    padding: 18px 136px 0 20px;
+  }
+  .explains__text {
+    font-size: 13px;
+    max-width: none;
+  }
+  .explains__mascot {
+    position: absolute;
+    right: -8px;
+    bottom: -1px;
+    width: 160px;
+    margin: 0;
+    /* the art's feet sit on the card's bottom edge; clip anything below it */
+    clip-path: inset(-40px -40px 1px -40px);
+  }
+}
+
 /* Tablet: sits beside the preview card at equal height — stack text over a bigger mopi */
 @media (max-width: 1023px) and (min-width: 721px) {
   .explains {
@@ -63,9 +86,10 @@
     max-width: none;
   }
   .explains__mascot {
-    align-self: flex-end;
-    width: min(190px, 70%);
-    margin: auto -6px 0 0;
+    /* fill the equal-height cell with a larger, centred mopi instead of leaving a blank middle */
+    align-self: center;
+    width: min(230px, 80%);
+    margin: auto auto 0;
   }
 }
 

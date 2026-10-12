@@ -1,6 +1,8 @@
 import { useCleaner } from '../../state/cleaner'
 import { CONFIG } from '../../config'
 import { formatBps, formatSol } from '../../lib/format'
+import { isExampleServiceFee } from '../../lib/demo'
+import { loadReviewModal } from '../review/loadReviewModal'
 import { Icon, InfoTip, cx } from '../ui'
 import { Mascot } from '../mascot/Mascot'
 import './PreviewCard.css'
@@ -22,13 +24,20 @@ export function PreviewCard({ className }: { className?: string }) {
   const bps = quote?.serviceFeeBps ?? feeConfig.serviceFeeBps
   const noServiceFee = Boolean(quote) && !isDemo && (quote!.serviceFeeBps === 0 || !feeConfig.feeWallet)
   const ready = Boolean(quote) && count > 0 && !scanning
+  // The amount counts selected accounts only; say so once the selection is partial.
+  const eligibleTotal = scan?.eligible.length ?? 0
+  const partial = Boolean(scan) && !scanning && eligibleTotal > 0 && count < eligibleTotal
 
   const holderNote = holder.isHolder
     ? ''
     : ` $MOPI holders pay ${formatBps(CONFIG.holderFeeBps)}${holder.mintConfigured ? '' : ' (planned)'}.`
-  const feeTip = `${formatBps(bps)} of the account SOL returned${
-    holder.isHolder ? ', holder rate' : ''
-  } — sent to mopi in the same transaction and shown in your wallet before you approve.${holderNote}`
+  // Demo on a deployment with no fee wallet: the fee is illustrative only.
+  const exampleFee = isExampleServiceFee(feeConfig)
+  const feeTip = exampleFee
+    ? `Example only — this deployment charges no service fee. With a fee wallet set, ${formatBps(bps)} of the account SOL returned would go to mopi.`
+    : `${formatBps(bps)} of the account SOL returned${
+        holder.isHolder ? ', holder rate' : ''
+      } — sent to mopi in the same transaction and shown in your wallet before you approve.${holderNote}`
 
   const note = !scan
     ? 'Scan a wallet to see an estimate.'
@@ -47,8 +56,15 @@ export function PreviewCard({ className }: { className?: string }) {
       </div>
 
       <dl className={cx('preview__rows', scanning && 'is-loading')} aria-busy={scanning || undefined}>
-        <div className="preview__row">
-          <dt>Account SOL detected</dt>
+        <div className={cx('preview__row', partial && 'preview__row--partial')}>
+          <dt>
+            Account SOL detected
+            {partial && (
+              <span className="preview__sel tabular">
+                {count} of {eligibleTotal} selected
+              </span>
+            )}
+          </dt>
           <dd>
             <Amount lamports={quote?.reclaimLamports ?? 0} />
           </dd>
@@ -62,6 +78,7 @@ export function PreviewCard({ className }: { className?: string }) {
         <div className="preview__row">
           <dt>
             Service fee
+            {exampleFee && <span className="preview__example">(example)</span>}
             {!noServiceFee && <InfoTip label="About the service fee" content={feeTip} />}
             {holder.isHolder && <span className="preview__holder">holder rate</span>}
           </dt>
@@ -88,6 +105,8 @@ export function PreviewCard({ className }: { className?: string }) {
         className="btn btn--primary btn--lg btn--block preview__cta"
         disabled={!ready || cleanup.phase === 'executing'}
         onClick={openReview}
+        onPointerEnter={() => void loadReviewModal().catch(() => {})}
+        onFocus={() => void loadReviewModal().catch(() => {})}
       >
         <span className="home-wide">
           {count > 0 ? `Review ${count} ${count === 1 ? 'account' : 'accounts'}` : 'Review accounts'}

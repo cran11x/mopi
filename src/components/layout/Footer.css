@@ -66,4 +66,14 @@
     justify-self: center;
     text-align: center;
   }
+  /* phones: 40px-tall tap targets without changing the line's look */
+  .site-footer__links {
+    gap: 2px;
+  }
+  .site-footer__links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 6px;
+  }
 }

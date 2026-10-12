@@ -12,6 +12,7 @@ import { ConnectButton } from './ConnectButton'
 import { NetworkSelect } from './NetworkSelect'
 import './Header.css'
 
+const NETWORKS: Cluster[] = ['mainnet-beta', 'devnet']
 const PRIMARY: Route[] = ['clean', 'how-it-works', 'fees', 'docs']
 const MOBILE_LINKS: Array<{ route: Route; icon: IconName }> = [
   { route: 'clean', icon: 'search' },
@@ -52,14 +53,20 @@ export function Header() {
     const onPointer = (e: PointerEvent) => {
       if (headerRef.current && !headerRef.current.contains(e.target as Node)) setMenuOpen(false)
     }
+    // Tabbing out of the header must not leave focus on controls hidden under the open panel.
+    const onFocusIn = (e: FocusEvent) => {
+      if (headerRef.current && e.target instanceof Node && !headerRef.current.contains(e.target)) setMenuOpen(false)
+    }
     const mq = window.matchMedia('(min-width: 721px)')
     const onMq = () => mq.matches && setMenuOpen(false)
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('focusin', onFocusIn)
     mq.addEventListener('change', onMq)
     return () => {
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('focusin', onFocusIn)
       mq.removeEventListener('change', onMq)
     }
   }, [menuOpen])
@@ -150,13 +157,29 @@ function MobilePanel({ route, onClose }: { route: Route; onClose: () => void }) 
           <p className="mobile-panel__label" id="mobile-network-label">
             Network
           </p>
-          <div className="mobile-panel__seg" role="radiogroup" aria-labelledby="mobile-network-label">
-            {(['mainnet-beta', 'devnet'] as Cluster[]).map((c) => (
+          <div
+            className="mobile-panel__seg"
+            role="radiogroup"
+            aria-labelledby="mobile-network-label"
+            onKeyDown={(e) => {
+              // One Tab stop; arrow keys move the choice (roving tabindex).
+              const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+              if (!dir) return
+              e.preventDefault()
+              const i = NETWORKS.indexOf(cluster)
+              const next = NETWORKS[(i + dir + NETWORKS.length) % NETWORKS.length]
+              setCluster(next)
+              e.currentTarget.querySelector<HTMLButtonElement>(`[data-cluster="${next}"]`)?.focus()
+            }}
+          >
+            {NETWORKS.map((c) => (
               <button
                 key={c}
                 type="button"
                 role="radio"
                 aria-checked={cluster === c}
+                tabIndex={cluster === c ? 0 : -1}
+                data-cluster={c}
                 className="mobile-panel__seg-btn"
                 onClick={() => setCluster(c)}
               >

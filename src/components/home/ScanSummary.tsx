@@ -44,8 +44,8 @@ export function ScanSummary({ className }: { className?: string }) {
         <h3 className="scan-summary__title">Scan results</h3>
         {scan?.isDemo && !scanning && <Chip tone="cream">Demo estimates</Chip>}
         <p className="scan-summary__scope">
-          <span className="home-wide">Supported empty SPL accounts only.</span>
-          <span className="home-narrow">Supported empty SPL only.</span>
+          <span className="home-wide">Only empty, supported accounts close.</span>
+          <span className="home-narrow">Only empty accounts close.</span>
         </p>
       </div>
 

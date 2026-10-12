@@ -12,6 +12,12 @@ const INSTALL_LINKS = [
   { name: 'Backpack', href: 'https://backpack.app' },
 ]
 
+/** After a successful connect the "Connect wallet" opener is gone; hand focus to the visible account button. */
+const accountTrigger = () =>
+  Array.from(document.querySelectorAll<HTMLElement>('.acct-btn, .hicon.is-connected')).find(
+    (el) => el.getClientRects().length > 0,
+  )
+
 const isReady = (w: Wallet) =>
   w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable
 
@@ -129,7 +135,7 @@ export function WalletModal() {
   const busy = pending !== null
 
   return (
-    <Modal open={visible} onClose={close} title="Connect a wallet">
+    <Modal open={visible} onClose={close} title="Connect a wallet" returnFocus={accountTrigger}>
       <div className="wmodal">
         <p className="wmodal__lede">
           Connecting lets mopi scan your wallet and prepare cleanups. You approve every transaction in your wallet.
@@ -181,7 +187,7 @@ export function WalletModal() {
           </ul>
         ) : (
           <div className="wmodal__empty">
-            <Mascot pose="explain" width={96} decorative className="wmodal__empty-art" />
+            <Mascot pose="explain" width={80} decorative className="wmodal__empty-art" />
             <div>
               <h3 className="wmodal__empty-title">No wallet found in this browser</h3>
               <p className="wmodal__empty-copy">

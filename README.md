@@ -23,7 +23,7 @@ Nothing else: no token transfers, approvals or delegations, and no extra signers
 - **Lower service fee:** 4% → 2% of returned account SOL (configurable)
 - **Saved wallet watchlists:** save wallets and rescan them in one tap
 
-Holder perks turn on automatically once `VITE_MOPI_MINT` is set. Until then the UI shows them as planned. $MOPI is a utility token for mopi features. Nothing here is financial advice, and no returns are promised.
+Holder perks apply once the operator sets `VITE_MOPI_MINT` and rebuilds. Until then the UI shows them as planned. $MOPI is a utility token for mopi features. Nothing here is financial advice, and no returns are promised.
 
 ## Development
 
@@ -36,6 +36,8 @@ npm run typecheck
 npm run build                # static site in dist/
 npm run e2e                  # Playwright (RPC is mocked)
 ```
+
+The e2e suite builds the app and serves it on port 4173. Install its browser once with `npx playwright install chromium` (or point `PLAYWRIGHT_CHROMIUM_PATH` at an existing Chromium).
 
 The app is a static SPA with hash routes, so it can be hosted anywhere. `vercel.json` ships strict security headers (CSP, no framing).
 
@@ -52,6 +54,7 @@ Everything is public and baked into the client bundle at build time.
 | `VITE_HOLDER_FEE_BPS` | `200` | Service fee for $MOPI holders |
 | `VITE_MOPI_MINT` | _(empty)_ | $MOPI mint. Enables the holder check. |
 | `VITE_MOPI_HOLDER_MIN` | `100000` | Whole $MOPI tokens required for holder access |
+| `VITE_SITE_URL` | _(empty)_ | Public origin, e.g. `https://mopi.example`. Adds the canonical link, `og:url` and the absolute `og:image` share preview at build time. |
 
 ## Project layout
 

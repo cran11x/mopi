@@ -92,13 +92,26 @@
   color: var(--ink-faint);
 }
 .benefit__rate-old {
+  position: relative;
+  display: inline-block;
   font-size: 40px;
   font-weight: 800;
   letter-spacing: -0.04em;
   color: var(--ink-faint);
-  text-decoration: line-through;
-  text-decoration-thickness: 3px;
-  text-decoration-color: var(--line-strong);
+}
+/* A slightly angled bar drawn over the glyphs reads as a strike; a pale line-through read as a gap. */
+.benefit__rate-old::after {
+  content: '';
+  position: absolute;
+  left: -6%;
+  right: -2%;
+  top: 52%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ink-muted);
+  opacity: 0.8;
+  transform: rotate(-10deg);
+  pointer-events: none;
 }
 .benefit__rate-new {
   font-size: 56px;

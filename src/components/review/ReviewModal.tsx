@@ -5,6 +5,7 @@ import { useCluster } from '../../state/cluster'
 import { useWalletModal } from '../../state/walletModal'
 import { explorerTxUrl } from '../../config'
 import { formatBps, formatSol, shortAddress } from '../../lib/format'
+import { isExampleServiceFee } from '../../lib/demo'
 import type { BatchProgress, BatchStatus, CleanupQuote } from '../../lib/types'
 import { Button, Icon, Modal, cx, type IconName } from '../ui'
 import { Mascot } from '../mascot/Mascot'
@@ -20,11 +21,22 @@ function walletLabel(address: string | null): string {
   return shortAddress(address)
 }
 
+/** Focus target on close when "Review" is gone or disabled (e.g. a refresh found nothing left). */
+const focusScanField = () => document.querySelector<HTMLElement>('.scan-form input')
+
 export function ReviewModal() {
-  const { cleanup, closeReview, resetCleanup, openReview, scan } = useCleaner()
+  const { cleanup, closeReview, resetCleanup, openReview, runScan, scan } = useCleaner()
   const { phase } = cleanup
   const open = phase !== 'idle'
   const executing = phase === 'executing'
+  // Errors that mean the scan is out of date (tokens arrived, account closed or
+  // frozen, owner changed…) all say "rescan": retrying the same quote would just
+  // fail again, so offer a fresh scan instead.
+  const needsRescan =
+    phase === 'error' &&
+    [cleanup.error, ...cleanup.progress.map((p) => (p.status === 'failed' ? p.error : null))].some(
+      (e) => typeof e === 'string' && /rescan/i.test(e),
+    )
 
   const onClose = useCallback(() => {
     if (phase === 'done') resetCleanup()
@@ -45,7 +57,7 @@ export function ReviewModal() {
           : 'Cleanup didn’t finish'
 
   return (
-    <Modal open={open} onClose={onClose} title={title} dismissible={!executing}>
+    <Modal open={open} onClose={onClose} title={title} dismissible={!executing} returnFocus={focusScanField}>
       <div className="review">
         {phase === 'review' && <ReviewStep />}
         {phase === 'executing' && <ProgressStep />}
@@ -56,15 +68,30 @@ export function ReviewModal() {
               <Icon name="alert" size={18} />
               <span>{cleanup.error ?? 'Something went wrong.'}</span>
             </p>
-            {cleanup.progress.length > 0 && <ProgressList progress={cleanup.progress} />}
+            {cleanup.progress.length > 0 && <ProgressList progress={cleanup.progress} hideError={cleanup.error} />}
             <p className="review__fine">Nothing was closed unless a transaction above shows “Confirmed”.</p>
             <div className="review__actions">
               <Button variant="secondary" onClick={closeReview}>
                 Close
               </Button>
-              <Button variant="primary" onClick={openReview} disabled={!scan} iconRight="refresh">
-                Try again
-              </Button>
+              {needsRescan ? (
+                <Button
+                  variant="primary"
+                  disabled={!scan}
+                  iconLeft="refresh"
+                  onClick={() => {
+                    if (!scan) return
+                    closeReview()
+                    void runScan(scan.owner)
+                  }}
+                >
+                  Rescan wallet
+                </Button>
+              ) : (
+                <Button variant="primary" onClick={openReview} disabled={!scan} iconRight="refresh">
+                  Try again
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -84,6 +111,7 @@ function ReviewStep() {
   const connected = wallet.publicKey?.toBase58() ?? null
   const n = quote.accountCount
   const hasFee = quote.serviceFeeLamports > 0
+  const exampleFee = isExampleServiceFee(feeConfig)
 
   let action: ReactNode
   let blockerNote: ReactNode = null
@@ -162,7 +190,11 @@ function ReviewStep() {
         <Row label="Account SOL" value={sol(quote.reclaimLamports)} />
         <Row label="Est. network fee" value={sol(quote.networkFeeLamports, true)} />
         <Row
-          label={`Service fee${hasFee ? ` (${formatBps(quote.serviceFeeBps)}${quote.isHolderRate ? ', holder rate' : ''})` : ''}`}
+          label={`Service fee${
+            hasFee
+              ? ` (${exampleFee ? 'example, ' : ''}${formatBps(quote.serviceFeeBps)}${quote.isHolderRate ? ', holder rate' : ''})`
+              : ''
+          }`}
           value={hasFee ? sol(quote.serviceFeeLamports, true) : 'none'}
         />
         <div className="review__summary-total">
@@ -170,7 +202,13 @@ function ReviewStep() {
           <dd className="tabular">{sol(quote.netLamports)}</dd>
         </div>
       </dl>
-      {scan.isDemo && <p className="review__fine">Demo estimates — based on a sample wallet.</p>}
+      {(scan.isDemo || (exampleFee && hasFee)) && (
+        <p className="review__fine">
+          {scan.isDemo && 'Demo estimates — based on a sample wallet.'}
+          {scan.isDemo && exampleFee && hasFee && ' '}
+          {exampleFee && hasFee && 'The service fee is an example; this deployment charges none.'}
+        </p>
+      )}
 
       <h3 className="review__h3">What you’ll sign</h3>
       <ul className="review__sign">
@@ -180,7 +218,7 @@ function ReviewStep() {
         <SignItem icon="wallet">Their account SOL returns to {shortAddress(scan.owner)}</SignItem>
         {hasFee && (
           <SignItem icon="doc">
-            Service fee {sol(quote.serviceFeeLamports)} to mopi ({walletLabel(feeConfig.feeWallet)})
+            {`${exampleFee ? 'Example service fee' : 'Service fee'} ${sol(quote.serviceFeeLamports)} to mopi (${walletLabel(feeConfig.feeWallet)})`}
           </SignItem>
         )}
         <SignItem icon="shield">Nothing else — no token transfers, no approvals or delegations.</SignItem>
@@ -198,15 +236,19 @@ function ReviewStep() {
         </p>
       )}
 
-      <div className="review__actions">
-        <Button variant="secondary" onClick={closeReview}>
-          Cancel
-        </Button>
-        {action}
+      {/* On phones this footer sticks to the bottom of the scrolling sheet so the
+          main action never hides below the batch list. */}
+      <div className="review__footer">
+        <div className="review__actions">
+          <Button variant="secondary" onClick={closeReview}>
+            Cancel
+          </Button>
+          {action}
+        </div>
+        {executeBlocker === null && (
+          <p className="review__fine review__fine--center">Your wallet shows the final amounts before you approve.</p>
+        )}
       </div>
-      {executeBlocker === null && (
-        <p className="review__fine review__fine--center">Your wallet shows the final amounts before you approve.</p>
-      )}
     </>
   )
 }
@@ -246,9 +288,11 @@ function Batches({ quote }: { quote: CleanupQuote }) {
                   <span className="review__dot" aria-hidden="true">
                     ·
                   </span>
+                  <span className="sr-only">, </span>
                   {b.accounts.length} {b.accounts.length === 1 ? 'account' : 'accounts'}
                 </span>
-                <span className="review__batch-ret tabular">returns {sol(ret)}</span>
+                <span className="sr-only">, </span>
+                <span className="review__batch-ret tabular">{sol(ret)} back to you</span>
                 <Icon name="chevron-down" size={16} className="review__chev" />
               </summary>
               <ul className="review__addrs">
@@ -298,7 +342,8 @@ function ProgressStep() {
   )
 }
 
-function ProgressList({ progress }: { progress: BatchProgress[] }) {
+/** `hideError`: a message already shown in the step's alert — not repeated per transaction. */
+function ProgressList({ progress, hideError }: { progress: BatchProgress[]; hideError?: string | null }) {
   const { cluster } = useCluster()
   const { cleanup } = useCleaner()
   const total = progress.length
@@ -341,7 +386,7 @@ function ProgressList({ progress }: { progress: BatchProgress[] }) {
                   </a>
                 )}
               </span>
-              {p.error && <span className="review__step-error">{p.error}</span>}
+              {p.error && p.error !== hideError && <span className="review__step-error">{p.error}</span>}
             </span>
           </li>
         )
@@ -353,7 +398,8 @@ function ProgressList({ progress }: { progress: BatchProgress[] }) {
 /* ---------- Done ---------- */
 
 function DoneStep({ onDone }: { onDone: () => void }) {
-  const { cleanup } = useCleaner()
+  const { cleanup, feeConfig } = useCleaner()
+  const exampleFee = isExampleServiceFee(feeConfig)
   const { cluster } = useCluster()
   const r = cleanup.result
   if (!r) return null
@@ -368,7 +414,8 @@ function DoneStep({ onDone }: { onDone: () => void }) {
       <p className="review__done-sub">
         {cleanup.isDemoRun ? (
           <>
-            A real run would return about <strong className="tabular">{sol(r.returnedLamports)}</strong> after fees.
+            {exampleFee ? `With the example ${formatBps(feeConfig.serviceFeeBps)} fee, a real run` : 'A real run'} would
+            return about <strong className="tabular">{sol(r.returnedLamports)}</strong> after fees.
           </>
         ) : (
           <>

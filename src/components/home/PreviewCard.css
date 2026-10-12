@@ -74,6 +74,25 @@
   font-weight: 600;
   color: var(--ink-muted);
 }
+.preview__row--partial dt {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+.preview__sel {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.preview__row dt {
+  white-space: nowrap;
+}
+.preview__example {
+  margin-left: -4px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
 .preview__holder {
   height: 20px;
   padding: 0 8px;
@@ -175,5 +194,13 @@
   .preview__caption {
     margin-top: 8px;
     font-size: 12px;
+  }
+}
+
+/* Smallest phones: the "(example)" tag would squeeze the label; the info tip,
+   the review dialog and the demo result still say the fee is an example. */
+@media (max-width: 359px) {
+  .preview__example {
+    display: none;
   }
 }

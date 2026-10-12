@@ -4,7 +4,7 @@ import { routeHref } from '../lib/router'
 import { CtaBand, LinkButton, Page, PageIntro, Section } from '../components/layout/Page'
 import { Mascot } from '../components/mascot/Mascot'
 import { Card, Chip, Icon, type IconName } from '../components/ui'
-import { EXAMPLE_ACCOUNT_LAMPORTS, exampleQuote, illustrativeFeeConfig } from './FeesPage'
+import { EXAMPLE_ACCOUNT_LAMPORTS, exampleQuote, illustrativeFeeConfig } from '../lib/examples'
 import './HowItWorksPage.css'
 
 interface Step {
@@ -68,7 +68,7 @@ const STEPS: Step[] = [
     points: [
       {
         title: 'Only what you expect',
-        body: 'Each transaction holds CloseAccount instructions, one service-fee transfer and the standard compute-budget settings for the network fee. Nothing else.',
+        body: 'Each transaction holds CloseAccount instructions, at most one service-fee transfer and the standard compute-budget settings for the network fee. Nothing else.',
       },
       {
         title: 'Batched and simulated',
@@ -100,7 +100,7 @@ export function HowItWorksPage() {
       <PageIntro
         eyebrow="How it works"
         title="Three small steps."
-        accent="You approve each one."
+        accent="You approve the cleanup."
         lede="mopi reads public data, shows you what it found and what it costs, then hands a clear transaction to your wallet. You stay in control the whole way."
         mascot="explain"
         bubble="Here’s the plan."

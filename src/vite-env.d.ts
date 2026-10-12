@@ -15,6 +15,8 @@ interface ImportMetaEnv {
   readonly VITE_MOPI_MINT?: string
   /** Minimum $MOPI balance (UI units) for holder access. */
   readonly VITE_MOPI_HOLDER_MIN?: string
+  /** Public origin (build time only): canonical link and absolute og:image. */
+  readonly VITE_SITE_URL?: string
 }
 
 interface ImportMeta {

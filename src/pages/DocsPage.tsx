@@ -5,7 +5,7 @@ import { routeHref } from '../lib/router'
 import type { UnsupportedReason } from '../lib/types'
 import { CtaBand, LinkButton, Page, PageIntro } from '../components/layout/Page'
 import { Chip, Icon, cx, type IconName } from '../components/ui'
-import { EXAMPLE_ACCOUNT_LAMPORTS } from './FeesPage'
+import { EXAMPLE_ACCOUNT_LAMPORTS } from '../lib/examples'
 import './DocsPage.css'
 
 const SECTIONS = [
@@ -69,7 +69,7 @@ const SAFETY_STEPS: Array<{ icon: IconName; title: string; body: string }> = [
   {
     icon: 'shield',
     title: 'Checked before you’re asked',
-    body: 'Every instruction is checked against that short allow-list before your wallet sees it. Anything unexpected stops the cleanup.',
+    body: 'Every instruction is checked against that short allow-list before your wallet sees it. Anything unexpected stops that transaction before your wallet sees it.',
   },
   {
     icon: 'refresh',
@@ -128,6 +128,11 @@ const ENV_VARS: Array<{ name: string; def: string; body: ReactNode }> = [
     name: 'VITE_MOPI_HOLDER_MIN',
     def: '100000',
     body: 'Whole $MOPI tokens the connected wallet needs for holder access.',
+  },
+  {
+    name: 'VITE_SITE_URL',
+    def: 'empty',
+    body: 'Your public origin, e.g. https://mopi.example. Adds the canonical link and the share-preview image at build time.',
   },
 ]
 
@@ -311,8 +316,8 @@ export function DocsPage() {
             <p className="page-note docs-open">
               <Icon name="info" size={18} />
               <span>
-                <strong>Open source.</strong> The scanner, fee math and transaction checks are plain TypeScript you can
-                read, build and run yourself — see{' '}
+                <strong>Readable source.</strong> The scanner, fee math and transaction checks run in your browser as
+                plain client-side code you can inspect — see{' '}
                 <a className="page-inline-link" href={routeHref('docs', 'self-host')}>
                   Self-hosting
                 </a>

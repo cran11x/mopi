@@ -10,11 +10,21 @@
     />
     <meta name="theme-color" content="#ffffff" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- The hero art is the largest above-the-fold image; start it before the app bundle runs. -->
+    <link rel="preload" as="image" type="image/svg+xml" href="/src/assets/mascot/hero.svg" fetchpriority="high" />
     <meta property="og:title" content="mopi — Clean up. Get your SOL back." />
     <meta property="og:description" content="A tiny cleaner for your Solana wallet. Find empty token accounts and return their account SOL." />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="mopi" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="mopi, a fluffy mint cleaner, next to the words: Clean up. Get your SOL back." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- og:image, og:url and the canonical link need absolute URLs: they are added at build time from VITE_SITE_URL (see vite.config.ts). -->
   </head>
   <body>
+    <noscript>mopi needs JavaScript to scan wallets. Nothing is sent anywhere until you approve it in your own wallet.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

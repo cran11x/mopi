@@ -49,11 +49,11 @@
 }
 .home__summary {
   grid-area: summary;
-  padding: 24px 20px 0;
+  padding: 18px 20px 0;
 }
 .home__accounts {
   grid-area: accounts;
-  padding: 16px 20px 20px;
+  padding: 14px 20px 20px;
 }
 
 .home__side {

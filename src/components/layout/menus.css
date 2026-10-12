@@ -214,3 +214,17 @@
 .hmenu__holder {
   margin-top: 6px;
 }
+
+/* Phones: the three square header buttons sit close to the right edge, and a
+   236px panel anchored to the first one ran off the left edge at 320px. Anchor
+   the panels to the (full-width, sticky) header instead, at the page gutter. */
+@media (max-width: 720px) {
+  .site-header__actions--mobile .hmenu {
+    position: static;
+  }
+  .site-header__actions--mobile .hmenu__panel {
+    top: calc(100% + 4px);
+    right: var(--gutter);
+    max-width: calc(100vw - 2 * var(--gutter));
+  }
+}

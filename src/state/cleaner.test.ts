@@ -52,9 +52,11 @@ describe('cleaner execution guards', () => {
     await waitFor(() => expect(result.current.scan?.isDemo).toBe(false))
     expect(result.current.executeBlocker).toBeNull()
 
-    act(() => {
+    await act(async () => {
       void result.current.startCleanup()
       void result.current.startCleanup()
+      // execute.ts is imported lazily; let that settle.
+      await new Promise((r) => setTimeout(r, 20))
     })
     // The render-time `cleanup.phase` is stale here; the synchronous ref guard must catch it.
     expect(h.execute).toHaveBeenCalledTimes(1)
@@ -72,16 +74,62 @@ describe('cleaner execution guards', () => {
     rerender()
     await waitFor(() => expect(result.current.scanStatus).toBe('error'))
 
-    // Scan is still the mainnet one, connection is devnet.
-    expect(result.current.scan?.cluster).toBe('mainnet-beta')
-    expect(result.current.executeBlocker).toBe('stale-scan')
+    // The mainnet results are not left on screen (or executable) on devnet.
+    expect(result.current.scan).toBeNull()
+    expect(result.current.selected.size).toBe(0)
+    expect(result.current.executeBlocker).toBe('nothing-selected')
 
     await act(async () => {
       await result.current.startCleanup()
     })
     expect(h.execute).not.toHaveBeenCalled()
-    expect(result.current.cleanup.phase).toBe('error')
-    expect(result.current.cleanup.error).toMatch(/another network/)
+  })
+
+  it('a failed scan of another wallet clears the previous results; editing the field clears the error', async () => {
+    const { result } = renderHook(() => useCleaner(), { wrapper })
+    await waitFor(() => expect(result.current.scan?.isDemo).toBe(false))
+    const first = result.current.scan!.owner
+
+    // Same wallet, transient failure: keep its results.
+    h.scanImpl = async () => {
+      throw new Error('Failed to fetch')
+    }
+    await act(async () => {
+      await result.current.runScan(first)
+    })
+    expect(result.current.scanError).toMatch(/Couldn’t reach the Solana RPC/)
+    expect(result.current.scan?.owner).toBe(first)
+
+    // Another wallet fails: the first wallet's results must not pose as the new one's.
+    const other = Keypair.generate().publicKey.toBase58()
+    await act(async () => {
+      await result.current.runScan(other)
+    })
+    expect(result.current.scanStatus).toBe('error')
+    expect(result.current.scan).toBeNull()
+    expect(result.current.quote).toBeNull()
+
+    act(() => result.current.setAddressInput('x'))
+    expect(result.current.scanError).toBeNull()
+    expect(result.current.scanStatus).toBe('idle')
+
+    // An invalid address also clears stale results.
+    act(() => result.current.loadDemo())
+    expect(result.current.scan?.isDemo).toBe(true)
+    await act(async () => {
+      await result.current.runScan('not-an-address')
+    })
+    expect(result.current.scanError).toMatch(/look like a Solana address/)
+    expect(result.current.scan).toBeNull()
+  })
+
+  it('keeps runScan stable while typing', async () => {
+    const { result } = renderHook(() => useCleaner(), { wrapper })
+    await waitFor(() => expect(result.current.scan?.isDemo).toBe(false))
+    const before = result.current.runScan
+    act(() => result.current.setAddressInput('abc'))
+    expect(result.current.addressInput).toBe('abc')
+    expect(result.current.runScan).toBe(before)
   })
 
   it('blocks execution while a rescan is in flight, and unblocks once it lands', async () => {

@@ -34,7 +34,7 @@
   align-items: center;
   gap: 16px;
   min-width: 0;
-  height: 56px;
+  height: 50px;
   padding: 0 20px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -48,7 +48,7 @@
 .scan-summary__num {
   flex: none;
   min-width: 0.6em;
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.04em;
@@ -137,5 +137,22 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+}
+
+/* Very narrow phones: shrink so all three labels fit in full instead of ellipsizing */
+@media (max-width: 359px) {
+  .scan-summary__tile {
+    gap: 5px;
+    padding: 0 7px;
+  }
+  .scan-summary__num {
+    font-size: 20px;
+  }
+  .scan-summary__label {
+    white-space: normal;
+    overflow: visible;
+    font-size: 10.5px;
+    line-height: 1.1;
   }
 }

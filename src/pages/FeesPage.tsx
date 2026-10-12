@@ -2,50 +2,12 @@ import { useMemo } from 'react'
 import { CONFIG } from '../config'
 import { formatBps, formatSol } from '../lib/format'
 import { routeHref } from '../lib/router'
-import { buildQuote, defaultFeeConfig } from '../lib/solana/fees'
-import type { CleanupQuote, FeeConfig, TokenAccountInfo } from '../lib/types'
+import { EXAMPLE_ACCOUNT_LAMPORTS, exampleQuote, illustrativeFeeConfig } from '../lib/examples'
 import { CtaBand, LinkButton, Page, PageIntro, Section } from '../components/layout/Page'
 import { Card, Chip, Icon, type IconName } from '../components/ui'
 import './FeesPage.css'
 
-/** Rent-exempt deposit of a standard 165-byte SPL token account. */
-export const EXAMPLE_ACCOUNT_LAMPORTS = 2_039_280
 const EXAMPLE_COUNTS = [1, 5, 24, 60]
-
-/** Synthetic eligible accounts for fee illustrations (never sent anywhere). */
-export function exampleAccounts(count: number): TokenAccountInfo[] {
-  return Array.from({ length: count }, (_, i) => ({
-    address: `example-${i}`,
-    mint: 'example-mint',
-    owner: 'example-owner',
-    program: 'spl-token',
-    programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
-    lamports: EXAMPLE_ACCOUNT_LAMPORTS,
-    amountRaw: '0',
-    decimals: 0,
-    uiAmount: '0',
-    isNative: false,
-    state: 'initialized',
-    closeAuthority: null,
-    extensions: [],
-    status: 'eligible',
-  }))
-}
-
-/**
- * Fee config used for illustrations: the deployment's real config, or — when
- * no fee wallet is configured — the standard rate with a placeholder
- * recipient so the example still shows what a fee would look like.
- */
-export function illustrativeFeeConfig(): { fee: FeeConfig; isPlaceholder: boolean } {
-  const base = defaultFeeConfig(false)
-  if (CONFIG.feeWallet) return { fee: base, isPlaceholder: false }
-  return { fee: { ...base, feeWallet: 'illustration-only', serviceFeeBps: CONFIG.serviceFeeBps }, isPlaceholder: true }
-}
-
-export function exampleQuote(count: number): CleanupQuote {
-  return buildQuote(exampleAccounts(count), illustrativeFeeConfig().fee)
-}
 
 const sol = (lamports: number) => formatSol(lamports)
 
@@ -72,7 +34,7 @@ export function FeesPage() {
           <Icon name="doc" size={14} /> Fees shown before you approve
         </Chip>
         <Chip tone="outline">
-          <Icon name="shield" size={14} /> One transaction, one fee transfer
+          <Icon name="shield" size={14} /> Fee paid inside the cleanup transaction
         </Chip>
       </PageIntro>
 
@@ -220,8 +182,7 @@ export function FeesPage() {
         </div>
         <p className="fees__table-note">
           <Icon name="info" size={16} />
-          Estimates. Priority fees vary a little with network conditions; your wallet shows the final numbers before you
-          sign.
+          Estimates. Your wallet shows the final numbers before you sign.
         </p>
       </Section>
 
@@ -274,7 +235,7 @@ const POINTS: Array<{ icon: IconName; title: string; body: string }> = [
     title: 'A lower rate for $MOPI holders',
     body: CONFIG.mopiMint
       ? `Holding at least ${CONFIG.holderMin.toLocaleString('en-US')} $MOPI in the connected wallet lowers the service fee from ${formatBps(CONFIG.serviceFeeBps)} to ${formatBps(CONFIG.holderFeeBps)}.`
-      : `Holder access is planned to lower the service fee from ${formatBps(CONFIG.serviceFeeBps)} to ${formatBps(CONFIG.holderFeeBps)}. It switches on automatically once the token is live.`,
+      : `Holder access is planned to lower the service fee from ${formatBps(CONFIG.serviceFeeBps)} to ${formatBps(CONFIG.holderFeeBps)}. It applies once the operator configures the $MOPI mint.`,
   },
 ]
 

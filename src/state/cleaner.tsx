@@ -14,7 +14,8 @@ import { CONFIG } from '../config'
 import { createDemoScan, demoFeeConfig, DEMO_OWNER, isDemoAddress } from '../lib/demo'
 import { buildQuote, defaultFeeConfig } from '../lib/solana/fees'
 import { scanWallet } from '../lib/solana/scan'
-import { executeCleanup } from '../lib/solana/execute'
+// execute.ts (transaction building, safety checks, sending) is loaded on the
+// first real cleanup, so it stays out of the first-paint bundle.
 import { getHolderStatus } from '../lib/solana/holder'
 import type {
   BatchProgress,
@@ -110,7 +111,8 @@ function describeError(err: unknown): string {
     const msg = err.message || err.name
     if (/User rejected|rejected the request|declined/i.test(msg)) return 'You declined the request in your wallet.'
     if (/429|Too Many Requests|rate/i.test(msg)) return 'The RPC endpoint is rate limiting requests. Try again in a moment.'
-    if (/Failed to fetch|NetworkError|fetch failed/i.test(msg)) return 'Could not reach the Solana RPC endpoint.'
+    if (/Failed to fetch|NetworkError|fetch failed|Load failed/i.test(msg))
+      return 'Couldn’t reach the Solana RPC. Check your connection and try again — public endpoints are often busy.'
     return msg
   }
   return String(err)
@@ -123,7 +125,7 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
   const wallet = useWallet()
   const { cluster } = useCluster()
 
-  const [addressInput, setAddressInput] = useState<string>(DEMO_OWNER)
+  const [addressInput, setAddressInputState] = useState<string>(DEMO_OWNER)
   const [scanStatus, setScanStatus] = useState<ScanStatus>('done')
   const [scanError, setScanError] = useState<string | null>(null)
   const [scan, setScan] = useState<ScanResult | null>(() => createDemoScan(cluster))
@@ -135,17 +137,44 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
   /** Set synchronously while a cleanup runs; the render-time `cleanup.phase` can be stale. */
   const executingRef = useRef(false)
   const scanAbort = useRef<AbortController | null>(null)
+  // Latest values for stable callbacks (a keystroke must not rebuild runScan
+  // and re-render every consumer).
+  const addressInputRef = useRef(addressInput)
+  addressInputRef.current = addressInput
+  const scanRef = useRef(scan)
+  scanRef.current = scan
 
   const applyScan = useCallback((result: ScanResult) => {
     setScan(result)
     setSelected(new Set(result.eligible.map((a) => a.address)))
-    setCleanup(IDLE_CLEANUP)
+    // Never close the progress dialog under a running cleanup (e.g. an
+    // account switch in the wallet auto-scans mid-run).
+    if (!executingRef.current) setCleanup(IDLE_CLEANUP)
+  }, [])
+
+  /** Results that don't belong to the wallet/network being asked about must not stay on screen. */
+  const dropScanUnlessFor = useCallback(
+    (owner: string | null) => {
+      const current = scanRef.current
+      if (!current || (owner && current.owner === owner && current.cluster === cluster)) return
+      setScan(null)
+      setSelected(new Set())
+      if (!executingRef.current) setCleanup(IDLE_CLEANUP)
+    },
+    [cluster],
+  )
+
+  const setAddressInput = useCallback((value: string) => {
+    setAddressInputState(value)
+    // Editing the field dismisses the previous error.
+    setScanError(null)
+    setScanStatus((s) => (s === 'error' ? (scanRef.current ? 'done' : 'idle') : s))
   }, [])
 
   const loadDemo = useCallback(() => {
     scanAbort.current?.abort()
     scanSeq.current++
-    setAddressInput(DEMO_OWNER)
+    setAddressInputState(DEMO_OWNER)
     setScanError(null)
     setScanStatus('done')
     applyScan(createDemoScan(cluster))
@@ -153,16 +182,19 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
 
   const runScan = useCallback(
     async (address?: string) => {
-      const input = (address ?? addressInput).trim()
-      if (address !== undefined) setAddressInput(address)
+      const input = (address ?? addressInputRef.current).trim()
+      if (address !== undefined) setAddressInputState(address)
       if (isDemoAddress(input)) {
         loadDemo()
         return
       }
       const owner = parseAddress(input)
       if (!owner) {
+        scanAbort.current?.abort()
+        scanSeq.current++
         setScanStatus('error')
         setScanError(input ? 'That doesn’t look like a Solana address.' : 'Paste a wallet address to scan.')
+        if (input) dropScanUnlessFor(null)
         return
       }
       scanAbort.current?.abort()
@@ -180,9 +212,33 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
         if (seq !== scanSeq.current || controller.signal.aborted) return
         setScanStatus('error')
         setScanError(describeError(err))
+        dropScanUnlessFor(owner.toBase58())
       }
     },
-    [addressInput, applyScan, cluster, connection, loadDemo],
+    [applyScan, cluster, connection, dropScanUnlessFor, loadDemo],
+  )
+
+  /**
+   * Re-scan the cleaned wallet after (partial) success. Guarded like any
+   * scan: a newer scan, another wallet or another network wins.
+   */
+  const refreshAfterCleanup = useCallback(
+    (owner: string) => {
+      const current = scanRef.current
+      if (!current || current.owner !== owner || current.cluster !== cluster) return
+      scanAbort.current?.abort()
+      const controller = new AbortController()
+      scanAbort.current = controller
+      const seq = ++scanSeq.current
+      scanWallet(connection, new PublicKey(owner), { cluster, signal: controller.signal })
+        .then((fresh) => {
+          if (seq !== scanSeq.current || controller.signal.aborted) return
+          setScan(fresh)
+          setSelected(new Set(fresh.eligible.map((a) => a.address)))
+        })
+        .catch(() => {})
+    },
+    [cluster, connection],
   )
 
   // Cluster switch: re-run the current scan on the new cluster.
@@ -318,8 +374,11 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
     }
     executingRef.current = true
     const quoteAtStart = quote
+    const owner = scan.owner
+    let lastProgress: BatchProgress[] = []
     setCleanup({ phase: 'executing', progress: [], error: null, result: null, isDemoRun: false })
     try {
+      const { executeCleanup } = await import('../lib/solana/execute')
       const progress = await executeCleanup({
         connection,
         wallet: {
@@ -329,7 +388,10 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
         },
         quote: quoteAtStart,
         fee: feeConfig,
-        onProgress: (p) => setCleanup((c) => ({ ...c, progress: p })),
+        onProgress: (p) => {
+          lastProgress = p
+          setCleanup((c) => ({ ...c, progress: p }))
+        },
       })
       const confirmed = progress.filter((p) => p.status === 'confirmed')
       const returnedLamports = confirmed.reduce((sum, p) => {
@@ -348,23 +410,22 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
           signatures: confirmed.map((p) => p.signature).filter((s): s is string => Boolean(s)),
         },
       })
-      if (confirmed.length > 0) {
-        // Refresh balances in the background; keep the result visible.
-        scanWallet(connection, new PublicKey(scan.owner), { cluster })
-          .then((fresh) => {
-            setScan(fresh)
-            setSelected(new Set(fresh.eligible.map((a) => a.address)))
-          })
-          .catch(() => {})
-      }
+      executingRef.current = false
+      // Refresh balances in the background; keep the result visible.
+      if (confirmed.length > 0) refreshAfterCleanup(owner)
     } catch (err) {
+      executingRef.current = false
       setCleanup((c) => ({ ...c, phase: 'error', error: describeError(err) }))
+      // e.g. batch 1 confirmed, then the second wallet prompt was declined:
+      // the closed accounts must not stay listed (and selected) as eligible.
+      if (lastProgress.some((p) => p.status === 'confirmed')) refreshAfterCleanup(owner)
     } finally {
       executingRef.current = false
     }
-  }, [cleanup.phase, cluster, connection, executeBlocker, feeConfig, quote, runDemoCleanup, scan, wallet])
+  }, [cleanup.phase, connection, executeBlocker, feeConfig, quote, refreshAfterCleanup, runDemoCleanup, scan, wallet])
 
-  const value: CleanerApi = {
+  const value = useMemo<CleanerApi>(
+    () => ({
     addressInput,
     setAddressInput,
     scanStatus,
@@ -385,7 +446,30 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
     closeReview,
     startCleanup,
     resetCleanup,
-  }
+    }),
+    [
+      addressInput,
+      setAddressInput,
+      scanStatus,
+      scanError,
+      scan,
+      runScan,
+      loadDemo,
+      selected,
+      selectedAccounts,
+      toggleAccount,
+      setAllSelected,
+      holder,
+      feeConfig,
+      quote,
+      cleanup,
+      executeBlocker,
+      openReview,
+      closeReview,
+      startCleanup,
+      resetCleanup,
+    ],
+  )
 
   return <CleanerContext.Provider value={value}>{children}</CleanerContext.Provider>
 }

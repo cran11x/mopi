@@ -1,13 +1,19 @@
 import { defineConfig, devices } from '@playwright/test'
 
 // E2E runs against the production build. RPC traffic is mocked per test with
-// page.route(), so no network access is needed.
-const executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH ?? undefined
+// page.route() / page.routeWebSocket(), so no network access is needed.
+//
+// Locally a preinstalled Chromium can be used with PLAYWRIGHT_CHROMIUM_PATH;
+// in CI (unset) Playwright's own bundled browser is used
+// (`npx playwright install --with-deps chromium`).
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM_PATH?.trim() || undefined
 
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
   fullyParallel: true,
+  forbidOnly: Boolean(process.env.CI),
+  retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL: 'http://localhost:4173',

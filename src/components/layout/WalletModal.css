@@ -99,9 +99,9 @@
 
 .wmodal__empty {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: flex-start;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--mint-200);
   border-radius: var(--r-lg);
   background: var(--mint-50);
@@ -122,7 +122,7 @@
 .wmodal__install {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   margin: 14px 0 0;
   padding: 0;
   list-style: none;
@@ -132,7 +132,7 @@
   align-items: center;
   gap: 6px;
   height: 34px;
-  padding: 0 12px;
+  padding: 0 9px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
   background: var(--surface);
@@ -175,6 +175,9 @@
   font-size: 13px;
   color: var(--ink-muted);
 }
+.wmodal__safe > span {
+  text-wrap: pretty;
+}
 .wmodal__safe > svg {
   flex: none;
   color: var(--forest);
@@ -195,5 +198,8 @@
   }
   .wmodal__install {
     justify-content: center;
+  }
+  .wmodal__install-link {
+    height: 40px;
   }
 }

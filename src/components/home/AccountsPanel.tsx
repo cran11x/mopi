@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { memo, useEffect, useState, type MouseEvent } from 'react'
 import { useCleaner } from '../../state/cleaner'
 import { explorerAccountUrl } from '../../config'
 import { formatSol, formatTokenAmount, ordinal2, shortAddress } from '../../lib/format'
@@ -96,16 +96,18 @@ function EligibleTable({
   const all = selectedCount === scan.eligible.length && selectedCount > 0
   const some = selectedCount > 0 && !all
 
-  const onRowClick = (e: MouseEvent<HTMLDivElement>, address: string) => {
-    // Let links, the checkbox itself and text selection behave normally.
-    const target = e.target as HTMLElement
-    if (target.closest('a, input, button, label')) return
-    if (window.getSelection()?.toString()) return
-    toggleAccount(address)
-  }
-
   return (
     <>
+      {/* Phone only: the table header (and its select-all box) is hidden at ≤720px,
+          so offer the same bulk action as a compact control above the rows. */}
+      <div className="acct-bulk">
+        <span className="acct-bulk__count tabular">
+          {selectedCount} of {scan.eligible.length} selected
+        </span>
+        <button type="button" className="link acct-bulk__btn" onClick={() => setAllSelected(!all)}>
+          {all ? 'Clear all' : 'Select all'}
+        </button>
+      </div>
       <div className="acct-table" role="table" aria-label="Eligible accounts" aria-rowcount={scan.eligible.length + 1}>
         <div role="rowgroup">
           <div role="row" className="acct-row acct-row--head" aria-rowindex={1}>
@@ -132,39 +134,17 @@ function EligibleTable({
           </div>
         </div>
         <div role="rowgroup">
-          {rows.map((a, i) => {
-            const name = `Account ${ordinal2(i + 1)}`
-            const isOn = selected.has(a.address)
-            return (
-              <div
-                key={a.address}
-                role="row"
-                aria-rowindex={i + 2}
-                aria-selected={isOn}
-                className={cx('acct-row', !isOn && 'acct-row--off')}
-                onClick={(e) => onRowClick(e, a.address)}
-              >
-                <div role="cell" className="acct-row__check">
-                  <Checkbox checked={isOn} onChange={() => toggleAccount(a.address)} label={`Select ${name}`} />
-                </div>
-                <div role="cell" className="acct-row__account">
-                  <AccountName account={a} name={name} isDemo={scan.isDemo} cluster={scan.cluster} />
-                </div>
-                <div role="cell" className="acct-row__bal tabular">
-                  {formatTokenAmount(a.uiAmount)}
-                  <span className="acct-row__unit"> tokens</span>
-                </div>
-                <div role="cell" className="acct-row__sol tabular">
-                  {formatSol(a.lamports, { decimals: 3 })} SOL
-                </div>
-                <div role="cell" className="acct-row__status">
-                  <Chip tone="mint" className="acct-chip">
-                    Eligible
-                  </Chip>
-                </div>
-              </div>
-            )
-          })}
+          {rows.map((a, i) => (
+            <EligibleRow
+              key={a.address}
+              account={a}
+              index={i}
+              isOn={selected.has(a.address)}
+              isDemo={scan.isDemo}
+              cluster={scan.cluster}
+              onToggle={toggleAccount}
+            />
+          ))}
         </div>
       </div>
       <TableFooter
@@ -177,6 +157,63 @@ function EligibleTable({
     </>
   )
 }
+
+/**
+ * Memoized so a keystroke in the scan field or a toggle on one row does not
+ * re-render the other rows (`onToggle` is the stable `toggleAccount`).
+ */
+const EligibleRow = memo(function EligibleRow({
+  account: a,
+  index: i,
+  isOn,
+  isDemo,
+  cluster,
+  onToggle,
+}: {
+  account: TokenAccountInfo
+  index: number
+  isOn: boolean
+  isDemo: boolean
+  cluster: ScanResult['cluster']
+  onToggle: (address: string) => void
+}) {
+  const name = `Account ${ordinal2(i + 1)}`
+  const onRowClick = (e: MouseEvent<HTMLDivElement>) => {
+    // Let links, the checkbox itself and text selection behave normally.
+    const target = e.target as HTMLElement
+    if (target.closest('a, input, button, label')) return
+    if (window.getSelection()?.toString()) return
+    onToggle(a.address)
+  }
+  return (
+    <div
+      role="row"
+      aria-rowindex={i + 2}
+      aria-selected={isOn}
+      className={cx('acct-row', !isOn && 'acct-row--off')}
+      onClick={onRowClick}
+    >
+      <div role="cell" className="acct-row__check">
+        <Checkbox checked={isOn} onChange={() => onToggle(a.address)} label={`Select ${name}`} />
+      </div>
+      <div role="cell" className="acct-row__account">
+        <AccountName account={a} name={name} isDemo={isDemo} cluster={cluster} />
+      </div>
+      <div role="cell" className="acct-row__bal tabular">
+        {formatTokenAmount(a.uiAmount)}
+        <span className="acct-row__unit"> tokens</span>
+      </div>
+      <div role="cell" className="acct-row__sol tabular">
+        {formatSol(a.lamports, { decimals: 3 })} SOL
+      </div>
+      <div role="cell" className="acct-row__status">
+        <Chip tone="mint" className="acct-chip">
+          Eligible
+        </Chip>
+      </div>
+    </div>
+  )
+})
 
 /* ---------- Skipped ---------- */
 

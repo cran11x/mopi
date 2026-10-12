@@ -114,17 +114,30 @@ export function createDemoScan(cluster: Cluster = 'mainnet-beta', scannedAt = Da
   }
 }
 
+/** Placeholder recipient used when the demo illustrates a fee this deployment doesn't charge. */
+export const DEMO_FEE_WALLET = 'demo-fee-wallet'
+
 /**
  * Fee config used for demo estimates: the standard service fee is always
  * shown (even when this deployment has no fee wallet) so the demo
  * illustrates the full breakdown. Never used to build real transactions.
+ * When this deployment charges no fee, the fee is an example only — see
+ * {@link isExampleServiceFee}; the UI must label it that way.
  */
 export function demoFeeConfig(base: FeeConfig, isHolder: boolean): FeeConfig {
   return {
     ...base,
-    feeWallet: base.feeWallet ?? 'demo-fee-wallet',
+    feeWallet: base.feeWallet ?? DEMO_FEE_WALLET,
     serviceFeeBps: isHolder ? CONFIG.holderFeeBps : CONFIG.serviceFeeBps,
   }
+}
+
+/**
+ * True when `fee` shows a service fee that this deployment does not actually
+ * charge (demo with no VITE_FEE_WALLET). Label such amounts "example".
+ */
+export function isExampleServiceFee(fee: Pick<FeeConfig, 'feeWallet'>): boolean {
+  return fee.feeWallet === DEMO_FEE_WALLET
 }
 
 export function isDemoAddress(input: string): boolean {

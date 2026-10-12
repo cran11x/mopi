@@ -378,6 +378,25 @@
   .review__actions {
     flex-direction: column-reverse;
   }
+  /* sticky action bar: cancels the sheet body's side/bottom padding and adds the
+     home-indicator inset (index.html sets viewport-fit=cover) */
+  .review__footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    /* cancels .modal__body's side and bottom padding (incl. the safe-area inset) */
+    margin: 16px -16px calc(-20px - env(safe-area-inset-bottom, 0px));
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -8px 16px -12px rgba(18, 26, 22, 0.25);
+  }
+  .review__footer .review__actions {
+    margin-top: 0;
+  }
+  .review__footer .review__fine {
+    margin-top: 8px;
+  }
   .review__actions .btn {
     width: 100%;
   }

@@ -222,4 +222,13 @@
   .scan-form__meta {
     justify-content: center;
   }
+  /* 40px tap targets on phones */
+  .scan-form__clip {
+    width: 40px;
+    height: 40px;
+  }
+  .scan-form .link {
+    padding-block: 10px;
+    margin-block: -10px;
+  }
 }

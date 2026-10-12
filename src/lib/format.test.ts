@@ -74,4 +74,16 @@ describe('other formatters', () => {
     expect(formatTokenAmount('88000')).toBe('88,000')
     expect(formatTokenAmount('abc')).toBe('abc')
   })
+
+  it('formatTokenAmount keeps tiny and huge balances honest', () => {
+    expect(formatTokenAmount('0.0000001')).toBe('<0.000001')
+    expect(formatTokenAmount('1e-7')).toBe('<0.000001')
+    expect(formatTokenAmount('0.000000')).toBe('0')
+    expect(formatTokenAmount('0.42')).toBe('0.42')
+    expect(formatTokenAmount('1250')).toBe('1,250')
+    expect(formatTokenAmount('420.690000')).toBe('420.69')
+    expect(formatTokenAmount('17.1234567')).toBe('17.123456')
+    expect(formatTokenAmount('123456789012345678901')).toBe('123,456,789,012,345,678,901')
+    expect(formatTokenAmount('0001000.5')).toBe('1,000.5')
+  })
 })

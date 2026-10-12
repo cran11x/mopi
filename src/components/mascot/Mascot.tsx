@@ -49,6 +49,8 @@ export function Mascot({
       aria-hidden={decorative || undefined}
       className={['mascot', `mascot--${pose}`, className].filter(Boolean).join(' ')}
       loading={priority ? 'eager' : 'lazy'}
+      // The hero scene is the largest above-the-fold image (also preloaded in index.html).
+      fetchPriority={priority && pose === 'hero' ? 'high' : undefined}
       decoding="async"
       draggable={false}
     />

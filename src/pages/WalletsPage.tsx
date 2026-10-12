@@ -23,10 +23,33 @@ function timeAgo(at: number, now = Date.now()): string {
   return new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/** Where keyboard focus should land after the list changes (save / remove). */
+type FocusTarget = { address: string } | 'saved'
+
 export function WalletsPage() {
   const { wallets, canAdd, limit } = useWatchlist()
   const { holder } = useCleaner()
   const [announce, setAnnounce] = useState('')
+  const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null)
+
+  // The control that had focus (Save, Remove) is gone after the update; move focus somewhere sensible.
+  useEffect(() => {
+    if (!focusTarget) return
+    const el =
+      focusTarget === 'saved'
+        ? document.getElementById('saved-title')
+        : document.querySelector<HTMLElement>(
+            `.wallet-row[data-address="${CSS.escape(focusTarget.address)}"] .wallet-row__scan`,
+          )
+    el?.focus()
+    setFocusTarget(null)
+  }, [focusTarget, wallets])
+
+  const onRemoved = (address: string) => {
+    const i = wallets.findIndex((w) => w.address === address)
+    const next = wallets[i + 1] ?? wallets[i - 1]
+    setFocusTarget(next ? { address: next.address } : 'saved')
+  }
 
   return (
     <Page className="wallets">
@@ -35,7 +58,7 @@ export function WalletsPage() {
         title="Your wallets,"
         accent="one tap from tidy."
         lede="Save the wallets you keep an eye on and rescan any of them in one tap. Each one remembers its last scan."
-        mascot="head"
+        mascot="happy"
         bubble="I’ll remember these."
       >
         <Chip tone="outline">
@@ -50,7 +73,7 @@ export function WalletsPage() {
 
       <div className="wallets__layout">
         <section className="wallets__list-col" aria-labelledby="saved-title">
-          <h2 id="saved-title" className="wallets__h2">
+          <h2 id="saved-title" className="wallets__h2" tabIndex={-1}>
             Saved
           </h2>
           {wallets.length === 0 ? (
@@ -66,7 +89,7 @@ export function WalletsPage() {
           ) : (
             <ul className="wallets-list">
               {wallets.map((w) => (
-                <WalletRow key={w.id} wallet={w} onAnnounce={setAnnounce} />
+                <WalletRow key={w.id} wallet={w} onAnnounce={setAnnounce} onRemoved={onRemoved} />
               ))}
             </ul>
           )}
@@ -77,7 +100,11 @@ export function WalletsPage() {
         </section>
 
         <aside className="wallets__side" aria-label="Add a wallet">
-          {canAdd ? <AddWalletForm onAnnounce={setAnnounce} /> : <LockedCard limit={limit ?? 0} />}
+          {canAdd ? (
+            <AddWalletForm onAnnounce={setAnnounce} onSaved={(address) => setFocusTarget({ address })} />
+          ) : (
+            <LockedCard limit={limit ?? 0} />
+          )}
         </aside>
       </div>
 
@@ -88,7 +115,14 @@ export function WalletsPage() {
   )
 }
 
-function AddWalletForm({ onAnnounce }: { onAnnounce: (msg: string) => void }) {
+function AddWalletForm({
+  onAnnounce,
+  onSaved,
+}: {
+  onAnnounce: (msg: string) => void
+  /** Called with the saved address; focus moves to that row's Scan button. */
+  onSaved: (address: string) => void
+}) {
   const { add, wallets } = useWatchlist()
   const { publicKey } = useWallet()
   const [label, setLabel] = useState('')
@@ -109,6 +143,7 @@ function AddWalletForm({ onAnnounce }: { onAnnounce: (msg: string) => void }) {
       return
     }
     onAnnounce(`Saved ${label.trim() || 'wallet'} ${shortAddress(address.trim())}.`)
+    onSaved(address.trim())
     setLabel('')
     setAddress('')
     setError(null)
@@ -208,7 +243,15 @@ function LockedCard({ limit }: { limit: number }) {
   )
 }
 
-function WalletRow({ wallet, onAnnounce }: { wallet: SavedWallet; onAnnounce: (msg: string) => void }) {
+function WalletRow({
+  wallet,
+  onAnnounce,
+  onRemoved,
+}: {
+  wallet: SavedWallet
+  onAnnounce: (msg: string) => void
+  onRemoved: (address: string) => void
+}) {
   const { remove, rename } = useWatchlist()
   const { runScan } = useCleaner()
   const [confirming, setConfirming] = useState(false)
@@ -216,6 +259,8 @@ function WalletRow({ wallet, onAnnounce }: { wallet: SavedWallet; onAnnounce: (m
   const [draft, setDraft] = useState(wallet.label)
   const editRef = useRef<HTMLInputElement>(null)
   const confirmRef = useRef<HTMLDivElement>(null)
+  const trashRef = useRef<HTMLButtonElement>(null)
+  const returnToTrash = useRef(false)
   const id = useId()
 
   useEffect(() => {
@@ -223,6 +268,10 @@ function WalletRow({ wallet, onAnnounce }: { wallet: SavedWallet; onAnnounce: (m
   }, [editing])
   useEffect(() => {
     if (confirming) confirmRef.current?.querySelector<HTMLButtonElement>('[data-cancel]')?.focus()
+    else if (returnToTrash.current) {
+      returnToTrash.current = false
+      trashRef.current?.focus()
+    }
   }, [confirming])
 
   const last = wallet.lastScan
@@ -234,7 +283,7 @@ function WalletRow({ wallet, onAnnounce }: { wallet: SavedWallet; onAnnounce: (m
   }
 
   return (
-    <li className="wallet-row">
+    <li className="wallet-row" data-address={wallet.address}>
       <span className="wallet-row__avatar" aria-hidden="true">
         {(wallet.label.trim()[0] ?? 'W').toUpperCase()}
       </span>
@@ -316,13 +365,22 @@ function WalletRow({ wallet, onAnnounce }: { wallet: SavedWallet; onAnnounce: (m
               variant="secondary"
               className="wallet-row__danger"
               onClick={() => {
+                onRemoved(wallet.address)
                 remove(wallet.id)
                 onAnnounce(`Removed ${wallet.label}.`)
               }}
             >
               Remove
             </Button>
-            <Button data-cancel size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+            <Button
+              data-cancel
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                returnToTrash.current = true
+                setConfirming(false)
+              }}
+            >
               Cancel
             </Button>
           </div>
@@ -331,6 +389,7 @@ function WalletRow({ wallet, onAnnounce }: { wallet: SavedWallet; onAnnounce: (m
             <Button
               size="sm"
               iconLeft="search"
+              className="wallet-row__scan"
               onClick={() => {
                 void runScan(wallet.address)
                 navigate('clean')
@@ -340,6 +399,7 @@ function WalletRow({ wallet, onAnnounce }: { wallet: SavedWallet; onAnnounce: (m
               Scan
             </Button>
             <Button
+              ref={trashRef}
               size="sm"
               variant="ghost"
               iconOnly

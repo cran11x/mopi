@@ -10,7 +10,7 @@ function looksLikeAddress(value: string): boolean {
 }
 
 export function ScanForm({ className }: { className?: string }) {
-  const { addressInput, setAddressInput, scanStatus, scanError, scan, runScan, loadDemo } = useCleaner()
+  const { addressInput, setAddressInput, scanStatus, scanError, runScan, loadDemo } = useCleaner()
   const scanning = scanStatus === 'scanning'
   const inputId = useId()
   const errorId = useId()
@@ -74,7 +74,7 @@ export function ScanForm({ className }: { className?: string }) {
       </h2>
 
       <form className="scan-form__row" onSubmit={onSubmit} role="search" aria-label="Scan a wallet">
-        <div className={cx('scan-form__field', scanError && !scan && 'scan-form__field--error')}>
+        <div className={cx('scan-form__field', scanError && 'scan-form__field--error')}>
           <span className="scan-form__lead" aria-hidden="true">
             <Icon name="search" size={18} />
           </span>

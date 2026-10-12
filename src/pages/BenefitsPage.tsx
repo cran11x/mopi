@@ -7,7 +7,7 @@ import { useCleaner } from '../state/cleaner'
 import { useWalletModal } from '../state/walletModal'
 import { LinkButton, Page, PageIntro, Section } from '../components/layout/Page'
 import { Button, Card, Chip, Icon } from '../components/ui'
-import { exampleAccounts, illustrativeFeeConfig } from './FeesPage'
+import { exampleAccounts, illustrativeFeeConfig } from '../lib/examples'
 import './BenefitsPage.css'
 
 const fmtTokens = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 2 })
@@ -28,7 +28,11 @@ export function BenefitsPage() {
         eyebrow="Benefits"
         title="$MOPI"
         accent="holder access."
-        lede="Two small perks for people who tidy up often: a lower service fee and saved wallet watchlists. They switch on automatically for wallets that hold $MOPI."
+        lede={
+          live
+            ? 'Two small perks for people who tidy up often: a lower service fee and saved wallet watchlists. They apply automatically to wallets that hold $MOPI.'
+            : 'Two small perks for people who tidy up often: a lower service fee and saved wallet watchlists. Both are planned for $MOPI holders.'
+        }
         mascot="happy"
         bubble={live ? 'Thanks for sticking around!' : 'Coming soon.'}
       >
@@ -156,7 +160,7 @@ function HolderStatusPanel() {
           <p className="holder-status__title">
             Holder perks are planned
           </p>
-          <p>The $MOPI token isn’t live in this build. Holder perks switch on automatically once a mint is configured.</p>
+          <p>The $MOPI token isn’t live in this build. Holder perks apply once the operator configures the $MOPI mint.</p>
         </div>
       </div>
     )
