@@ -8,6 +8,23 @@
   flex-wrap: wrap;
   gap: 6px 12px;
 }
+.scan-summary__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--rose-200);
+  border-radius: var(--r-md);
+  background: var(--rose-50);
+  color: var(--rose-ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.scan-summary__warning svg {
+  flex: none;
+  margin-top: 1px;
+}
 .scan-summary__title {
   font-size: 16px;
   font-weight: 700;

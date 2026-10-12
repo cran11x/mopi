@@ -1,5 +1,5 @@
 import { useCleaner } from '../../state/cleaner'
-import { Chip, cx } from '../ui'
+import { Chip, Icon, cx } from '../ui'
 import './ScanSummary.css'
 
 export function ScanSummary({ className }: { className?: string }) {
@@ -43,7 +43,16 @@ export function ScanSummary({ className }: { className?: string }) {
       <div className="scan-summary__head">
         <h3 className="scan-summary__title">Scan results</h3>
         {scan?.isDemo && !scanning && <Chip tone="cream">Demo estimates</Chip>}
+        {scan?.warnings?.length && !scanning ? <Chip tone="rose">Partial scan</Chip> : null}
       </div>
+
+      {!scanning &&
+        scan?.warnings?.map((w) => (
+          <p key={w} className="scan-summary__warning" role="status">
+            <Icon name="alert" size={16} />
+            <span>{w}</span>
+          </p>
+        ))}
 
       <ul className="scan-summary__tiles" aria-busy={scanning || undefined}>
         {tiles.map((t) => (

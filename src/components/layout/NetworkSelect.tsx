@@ -2,7 +2,9 @@ import { CLUSTER_LABELS } from '../../config'
 import type { Cluster } from '../../lib/types'
 import { useCluster } from '../../state/cluster'
 import { Icon, SolanaMark, cx } from '../ui'
+import { useState } from 'react'
 import { useDropdown } from './useDropdown'
+import { RpcSettings } from './RpcSettings'
 import './menus.css'
 
 const CLUSTERS: Array<{ key: Cluster; hint: string }> = [
@@ -12,8 +14,9 @@ const CLUSTERS: Array<{ key: Cluster; hint: string }> = [
 
 /** Network picker. `pill` = desktop header, `icon` = square mobile button. */
 export function NetworkSelect({ variant = 'pill' }: { variant?: 'pill' | 'icon' }) {
-  const { cluster, setCluster } = useCluster()
+  const { cluster, setCluster, customRpc } = useCluster()
   const dd = useDropdown()
+  const [rpcOpen, setRpcOpen] = useState(false)
   const isDevnet = cluster === 'devnet'
   const menuId = `network-menu-${variant}`
 
@@ -74,8 +77,25 @@ export function NetworkSelect({ variant = 'pill' }: { variant?: 'pill' | 'icon' 
               </button>
             )
           })}
+          <button
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            className="hmenu__item"
+            onClick={() => {
+              dd.close(false)
+              setRpcOpen(true)
+            }}
+          >
+            <Icon name="refresh" size={18} />
+            <span className="hmenu__text">
+              <span className="hmenu__label">Custom RPC…</span>
+              <span className="hmenu__hint">{customRpc ? new URL(customRpc).host : 'Use your own endpoint'}</span>
+            </span>
+          </button>
         </div>
       )}
+      <RpcSettings open={rpcOpen} onClose={() => setRpcOpen(false)} />
     </div>
   )
 }

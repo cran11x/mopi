@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react'
 import type { WalletError } from '@solana/wallet-adapter-base'
 import type { ConnectionConfig } from '@solana/web3.js'
-import { RPC_FALLBACKS, RPC_URLS } from '../config'
+import { RPC_FALLBACKS } from '../config'
 import { createFailoverFetch } from '../lib/solana/rpc'
 import type { Cluster } from '../lib/types'
 import { ClusterProvider, useCluster } from './cluster'
@@ -14,8 +14,10 @@ import { CleanerProvider } from './cleaner'
 const NO_ADAPTERS: never[] = []
 
 /**
- * One Connection config per cluster, built once (stable identity:
- * ConnectionProvider rebuilds its Connection whenever `config` changes). Its
+ * Connection config for the active endpoint, memoised on (cluster, endpoint)
+ * (stable identity: ConnectionProvider rebuilds its Connection whenever
+ * `config` changes). The endpoint is the viewer's custom RPC or the
+ * deployment default; its
  * fetch bounds every attempt (RPC_ATTEMPT_TIMEOUT_MS), fails over to the
  * configured fallback endpoints on network errors, timeouts and endpoint-level
  * HTTP errors (401/402/403/404/408/410/429/5xx) and remembers the endpoint
@@ -23,16 +25,12 @@ const NO_ADAPTERS: never[] = []
  * A 429 is first retried briefly (0.6 s, 1.2 s) instead of web3.js's own
  * ~15 s backoff, so the app can say "rate limited" quickly.
  */
-const CONNECTION_CONFIGS: Record<Cluster, ConnectionConfig> = {
-  'mainnet-beta': connectionConfigFor('mainnet-beta'),
-  devnet: connectionConfigFor('devnet'),
-}
-
-function connectionConfigFor(cluster: Cluster): ConnectionConfig {
+function connectionConfigFor(cluster: Cluster, primary: string): ConnectionConfig {
+  const fallbacks = RPC_FALLBACKS[cluster].filter((u) => u.replace(/\/+$/, '') !== primary.replace(/\/+$/, ''))
   return {
     commitment: 'confirmed',
     disableRetryOnRateLimit: true,
-    fetch: createFailoverFetch({ endpoints: [RPC_URLS[cluster], ...RPC_FALLBACKS[cluster]] }),
+    fetch: createFailoverFetch({ endpoints: [primary, ...fallbacks] }),
   }
 }
 
@@ -42,10 +40,11 @@ function onWalletError(error: WalletError) {
 
 function SolanaProviders({ children }: { children: ReactNode }) {
   const { rpcUrl, cluster } = useCluster()
+  const config = useMemo(() => connectionConfigFor(cluster, rpcUrl), [cluster, rpcUrl])
   // A new endpoint yields a new Connection; the cleaner re-scans on cluster
   // change, so the tree is not remounted (menus and wallet state survive).
   return (
-    <ConnectionProvider endpoint={rpcUrl} config={CONNECTION_CONFIGS[cluster]}>
+    <ConnectionProvider endpoint={rpcUrl} config={config}>
       <WalletProvider wallets={NO_ADAPTERS} autoConnect onError={onWalletError}>
         <WalletModalProvider>
           <CleanerProvider>{children}</CleanerProvider>

@@ -71,7 +71,7 @@ Everything is public and baked into the client bundle at build time: change a va
 
 ## Launch checklist
 
-1. **Own RPC.** Set `VITE_SOLANA_RPC_URL` to a paid provider endpoint that allows CORS from your domain. Optionally list a second provider in `VITE_SOLANA_RPC_FALLBACKS` (same cluster); otherwise there is no fallback once you set your own primary.
+1. **Own RPC.** Set `VITE_SOLANA_RPC_URL` to a paid provider endpoint that allows CORS from your domain. Optionally list a second provider in `VITE_SOLANA_RPC_FALLBACKS` (same cluster); otherwise there is no fallback once you set your own primary. The free public endpoint (`api.mainnet-beta.solana.com`) answers many website requests with **403 Access forbidden**, especially the Token-2022 query, so don't launch on it. Visitors can also paste their own endpoint under **network menu → Custom RPC…** (stored only in their browser), and a scan where one token program is refused still shows the other program's accounts with a "Partial scan" warning.
 2. **Funded fee wallet.** Set `VITE_FEE_WALLET` to a wallet you control and send it at least 0.001 SOL **before** launch. Without that, mopi blocks every approval with a "fee wallet unfunded" warning.
 3. **Domain.** Point your domain at the static host, set `VITE_SITE_URL=https://your.domain` (canonical link and share image), and keep the `vercel.json` security headers (or their equivalent on another host).
 4. **Socials.** Set `VITE_X_URL` (and `VITE_TELEGRAM_URL` if you have one), then rebuild and redeploy.

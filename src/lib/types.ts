@@ -51,6 +51,8 @@ export interface TokenAccountInfo {
 }
 
 export interface ScanResult {
+  /** Non-fatal problems, e.g. one token program could not be read (results are partial). */
+  warnings?: string[]
   owner: string
   cluster: Cluster
   /** ms since epoch */

@@ -15,6 +15,7 @@ import { createDemoScan, demoFeeConfig, DEMO_OWNER, isDemoAddress } from '../lib
 import { buildQuote, defaultFeeConfig } from '../lib/solana/fees'
 import { estimatePriorityFee } from '../lib/solana/priority'
 import { scanWallet } from '../lib/solana/scan'
+import { isRpcForbidden } from '../lib/solana/rpcErrors'
 import { describeWalletError } from '../lib/solana/walletErrors'
 // execute.ts (transaction building, safety checks, sending) is loaded on the
 // first real cleanup, so it stays out of the first-paint bundle.
@@ -167,6 +168,8 @@ function describeError(err: unknown): string {
   if (err instanceof Error) {
     const msg = err.message || err.name
     if (/429|Too Many Requests|rate/i.test(msg)) return 'The RPC endpoint is rate limiting requests. Try again in a moment.'
+    if (isRpcForbidden(err))
+      return 'The Solana RPC refused the request (403). The free public endpoint blocks many websites — set your own RPC (e.g. Helius) in the network menu.'
     if (/timed out/i.test(msg)) return 'The Solana RPC didn’t answer in time. Try again — public endpoints are often busy.'
     if (/Failed to fetch|NetworkError|fetch failed|Load failed/i.test(msg))
       return 'Couldn’t reach the Solana RPC. Check your connection and try again — public endpoints are often busy.'
@@ -197,7 +200,7 @@ interface FeeWalletBalance {
 export function CleanerProvider({ children }: { children: ReactNode }) {
   const { connection } = useConnection()
   const wallet = useWallet()
-  const { cluster } = useCluster()
+  const { cluster, rpcUrl } = useCluster()
 
   const [addressInput, setAddressInputState] = useState<string>(DEMO_OWNER)
   const [scanStatus, setScanStatus] = useState<ScanStatus>('done')
@@ -342,6 +345,19 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
     else void runScan(scan.owner)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cluster])
+
+  // RPC endpoint changed on the same cluster (custom RPC saved or cleared):
+  // retry the current real scan, or the last address that failed, through it.
+  const lastRpc = useRef({ cluster, rpcUrl })
+  useEffect(() => {
+    const prev = lastRpc.current
+    lastRpc.current = { cluster, rpcUrl }
+    // A cluster switch also changes the endpoint; the effect above rescans for it.
+    if (prev.rpcUrl === rpcUrl || prev.cluster !== cluster) return
+    if (scan && !scan.isDemo) void runScan(scan.owner)
+    else if (scanError && addressInput.trim()) void runScan(addressInput)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cluster, rpcUrl])
 
   // Connecting a wallet fills the address and scans it (read-only).
   const connectedKey = wallet.publicKey?.toBase58() ?? null

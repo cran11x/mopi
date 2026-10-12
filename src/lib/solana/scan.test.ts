@@ -106,16 +106,31 @@ describe('scanWallet', () => {
     expect(res.unsupported[0].reason).toBe('unparsed')
   })
 
-  it('fails the whole scan if one program query fails (no partial data)', async () => {
-    const { connection } = mockConnection([entry(owner, {}, RENT)], new Error('429 Too Many Requests'))
-    await expect(scanWallet(connection, ownerKey, { cluster: 'devnet' })).rejects.toThrow(
-      /Token-2022.*429 Too Many Requests/,
-    )
+  it('returns the SPL Token results with a warning when only the Token-2022 query is refused (403)', async () => {
+    const forbidden = new Error('403 : {"jsonrpc":"2.0","error":{"code": 403, "message":"Access forbidden"}}')
+    const { connection } = mockConnection([entry(owner, {}, RENT)], forbidden)
+    const res = await scanWallet(connection, ownerKey, { cluster: 'devnet' })
+    expect(res.eligible).toHaveLength(1)
+    expect(res.warnings).toHaveLength(1)
+    expect(res.warnings?.[0]).toMatch(/Token-2022 accounts couldn’t be read — the RPC endpoint refused the request \(403\)/)
   })
 
-  it('fails when the SPL Token query fails', async () => {
+  it('returns the Token-2022 results with a warning when only the SPL Token query fails', async () => {
     const { connection } = mockConnection(new Error('fetch failed'), [])
+    const res = await scanWallet(connection, ownerKey, { cluster: 'devnet' })
+    expect(res.accounts).toHaveLength(0)
+    expect(res.warnings?.[0]).toMatch(/SPL Token accounts couldn’t be read — the RPC endpoint did not answer/)
+  })
+
+  it('fails the scan when both program queries fail', async () => {
+    const { connection } = mockConnection(new Error('fetch failed'), new Error('429 Too Many Requests'))
     await expect(scanWallet(connection, ownerKey, { cluster: 'devnet' })).rejects.toThrow(/SPL Token.*fetch failed/)
+  })
+
+  it('a complete scan carries no warnings', async () => {
+    const { connection } = mockConnection([entry(owner, {}, RENT)], [])
+    const res = await scanWallet(connection, ownerKey, { cluster: 'devnet' })
+    expect(res.warnings).toBeUndefined()
   })
 
   it('throws AbortError when already aborted, without RPC', async () => {
@@ -345,7 +360,7 @@ describe('scanWallet against real web3.js response parsing', () => {
     expect(res.eligible[0].address).toBe(t22Safe) // most account SOL first
   })
 
-  it('known gap: a base64 fallback entry is rejected by web3.js itself, failing the whole program query', async () => {
+  it('known gap: a base64 fallback entry is rejected by web3.js itself, failing that program query (partial scan)', async () => {
     // Agave's get_parsed_token_accounts filters out entries that fail to parse (e.g. token
     // accounts whose mint was closed → no decimals → binary fallback), so a real Agave RPC never
     // sends this; classify's Buffer branch is therefore unreachable through scanWallet, and those
@@ -355,9 +370,9 @@ describe('scanWallet against real web3.js response parsing', () => {
       const value = filter.programId === SPL ? [] : [keyedAccount(addr(), T22, 2_074_080, ['AAAA', 'base64'], 3)]
       return { context: { slot: 1 }, value }
     })
-    await expect(scanWallet(conn, owner, { cluster: 'mainnet-beta' })).rejects.toThrow(
-      /Could not read Token-2022 accounts: .*Expected an object/,
-    )
+    const res = await scanWallet(conn, owner, { cluster: 'mainnet-beta' })
+    expect(res.accounts).toHaveLength(0)
+    expect(res.warnings?.[0]).toMatch(/^Token-2022 accounts couldn’t be read/)
   })
 
   it('surfaces a real web3.js RPC error message (429) with the program label', async () => {

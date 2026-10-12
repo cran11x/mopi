@@ -1,0 +1,44 @@
+.rpcset {
+  display: grid;
+  gap: 8px;
+}
+.rpcset__lede {
+  margin-bottom: 6px;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.rpcset__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.rpcset__input {
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: 13px;
+}
+.rpcset__input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.rpcset__input[aria-invalid='true'] {
+  border-color: var(--rose-ink);
+}
+.rpcset__hint,
+.rpcset__error {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+.rpcset__error {
+  color: var(--rose-ink);
+}
+.rpcset__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
