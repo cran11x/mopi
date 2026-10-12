@@ -6,19 +6,23 @@ import {
   PublicKey,
   SendTransactionError,
   SystemProgram,
-  TransactionExpiredBlockheightExceededError,
   TransactionMessage,
   VersionedTransaction,
 } from '@solana/web3.js'
 import { createPublicKey, verify as verifySignature } from 'node:crypto'
 import { Buffer } from 'buffer'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  CONFIRM_POLL_MS,
+  MAX_CONFIRM_MS,
   MESSAGES,
+  REBROADCAST_MS,
+  REBROADCAST_OPTIONS,
   SEND_OPTIONS,
+  base58,
   describeSendError,
   describeTransactionError,
-  executeCleanup,
+  executeCleanup as runExecuteCleanup,
   isUserRejection,
 } from './execute'
 import { buildQuote } from './fees'
@@ -28,6 +32,33 @@ import type { BatchProgress, CleanupQuote, CleanupWallet } from '../types'
 import { RENT, SPL, T22, eligibleAccount, randomKey, testFeeConfig } from '../../test/solanaFixtures'
 
 const BLOCKHASH = Keypair.generate().publicKey.toBase58()
+
+// Confirmation polls every CONFIRM_POLL_MS: run every test on fake timers and
+// drive them until the run settles.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+/** Drives fake time until `p` settles; returns its value (or rethrows) and the fake ms elapsed. */
+async function drive<T>(p: Promise<T>, stepMs = 100): Promise<{ value: T; elapsed: number }> {
+  const start = Date.now()
+  let done = false
+  p.then(
+    () => (done = true),
+    () => (done = true),
+  )
+  for (let k = 0; k < 10_000 && !done; k++) await vi.advanceTimersByTimeAsync(stepMs)
+  if (!done) throw new Error('did not settle')
+  return { value: await p, elapsed: Date.now() - start }
+}
+
+
+/** executeCleanup with fake time driven until it settles. */
+const executeCleanup = async (params: Parameters<typeof runExecuteCleanup>[0]) =>
+  (await drive(runExecuteCleanup(params))).value
 
 function setup(n = 45) {
   const ownerKp = Keypair.generate()
@@ -42,28 +73,40 @@ function setup(n = 45) {
 
 type SigStatus = { slot: number; confirmations: number | null; err: unknown; confirmationStatus?: string } | null
 
+const CONFIRMED: SigStatus = { slot: 1, confirmations: 1, err: null, confirmationStatus: 'confirmed' }
+
+/** The signature (base58) of a serialized transaction — what a real RPC returns from sendTransaction. */
+const sigOf = (raw: Uint8Array) => base58(VersionedTransaction.deserialize(raw).signatures[0])
+
 function mockConnection(opts: { sendDelayMs?: number } = {}) {
-  let n = 0
   const c = {
     getLatestBlockhash: vi.fn(async (_c?: string) => ({ blockhash: BLOCKHASH, lastValidBlockHeight: 99 })),
     simulateTransaction: vi.fn(async (_tx: VersionedTransaction, _o?: unknown) => ({
       context: { slot: 1 },
       value: { err: null as unknown, logs: [] as string[] | null },
     })),
-    sendRawTransaction: vi.fn(async (_raw: Uint8Array, _o?: unknown) => {
+    sendRawTransaction: vi.fn(async (raw: Uint8Array, _o?: unknown) => {
       if (opts.sendDelayMs) await new Promise((r) => setTimeout(r, opts.sendDelayMs))
-      return `sig${++n}`
+      return sigOf(raw)
     }),
-    confirmTransaction: vi.fn(async (_s: unknown, _c?: string) => ({ context: { slot: 1 }, value: { err: null as unknown } })),
     // Block height still inside the blockhash's lifetime (lastValidBlockHeight 99).
     getBlockHeight: vi.fn(async (_c?: string) => 50),
-    getSignatureStatuses: vi.fn(async (_s: string[], _o?: unknown) => ({ context: { slot: 1 }, value: [null as SigStatus] })),
+    // Every signature is confirmed on the first poll unless a test says otherwise.
+    getSignatureStatuses: vi.fn(async (sigs: string[], _o?: unknown) => ({
+      context: { slot: 1 },
+      value: sigs.map((): SigStatus => CONFIRMED),
+    })),
     getMultipleParsedAccounts: vi.fn(async (_keys: PublicKey[], _o?: unknown) => ({
       context: { slot: 1 },
       value: [] as unknown[],
     })),
   }
   return { c, connection: c as unknown as Connection }
+}
+
+/** Signatures of the first sends (with preflight), in order. */
+function firstSends(c: ReturnType<typeof mockConnection>['c']): string[] {
+  return c.sendRawTransaction.mock.calls.filter((call) => call[1] === SEND_OPTIONS).map((call) => sigOf(call[0]))
 }
 
 type SignAll = (txs: VersionedTransaction[]) => Promise<VersionedTransaction[]>
@@ -145,14 +188,13 @@ describe('executeCleanup', () => {
       expect(sent.message.recentBlockhash).toBe(BLOCKHASH)
       expect(sent.message.compiledInstructions.length).toBe(2 + quote.batches[i].accounts.length + 1)
     })
-    expect(c.confirmTransaction).toHaveBeenCalledTimes(3)
-    c.confirmTransaction.mock.calls.forEach((call, i) => {
-      expect(call[0]).toEqual({ signature: `sig${i + 1}`, blockhash: BLOCKHASH, lastValidBlockHeight: 99 })
-      expect(call[1]).toBe('confirmed')
-    })
+    // Confirmed by polling signature statuses over HTTP (no websocket subscription).
+    const polled = c.getSignatureStatuses.mock.calls.flatMap((call) => call[0])
+    const sigs = firstSends(c)
+    expect(new Set(polled)).toEqual(new Set(sigs))
 
     expect(result.map((p) => p.status)).toEqual(['confirmed', 'confirmed', 'confirmed'])
-    expect(result.map((p) => p.signature)).toEqual(['sig1', 'sig2', 'sig3'])
+    expect(result.map((p) => p.signature)).toEqual(sigs)
     result.forEach((p, i) => {
       expect(p.index).toBe(quote.batches[i].index)
       expect(p.accountCount).toBe(quote.batches[i].accounts.length)
@@ -313,15 +355,22 @@ describe('executeCleanup', () => {
   it('confirmation failures: expired blockhash and on-chain error', async () => {
     const { ownerKp, fee, quote } = setup(45)
     const { c, connection } = mockConnection()
-    c.confirmTransaction
-      .mockResolvedValueOnce({ context: { slot: 1 }, value: { err: null } })
-      .mockRejectedValueOnce(new TransactionExpiredBlockheightExceededError('sig2'))
-      .mockResolvedValueOnce({ context: { slot: 1 }, value: { err: { InstructionError: [2, 'IncorrectProgramId'] } } })
+    // 1st batch confirms; 2nd never lands (history has nothing either); 3rd fails on chain.
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[]) => ({
+      context: { slot: 1 },
+      value: sigs.map((sig): SigStatus => {
+        const k = firstSends(c).indexOf(sig)
+        return k === 0 ? CONFIRMED : k === 2 ? { ...CONFIRMED, err: { InstructionError: [2, 'IncorrectProgramId'] } } : null
+      }),
+    }))
+    // Block height: fine for the pre-send check, then past lastValidBlockHeight (99).
+    c.getBlockHeight.mockResolvedValueOnce(50).mockResolvedValue(500)
     const { w } = wallet(ownerKp, 'all')
     const result = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    const sigs = firstSends(c)
     expect(result[0].status).toBe('confirmed')
-    expect(result[1]).toMatchObject({ status: 'failed', signature: 'sig2', error: MESSAGES.expired })
-    expect(result[2]).toMatchObject({ status: 'failed', signature: 'sig3', error: MESSAGES.alreadyClosed })
+    expect(result[1]).toMatchObject({ status: 'failed', signature: sigs[1], error: MESSAGES.expired })
+    expect(result[2]).toMatchObject({ status: 'failed', signature: sigs[2], error: MESSAGES.alreadyClosed })
   })
 
   it('a send error fails that batch only', async () => {
@@ -617,9 +666,7 @@ describe('blockhash lifetime and confirmation', () => {
       expect(sent.message.recentBlockhash).toBe(hashes[i])
       expect(() => assertSafeCleanupTransaction(sent, ownerKp.publicKey, quote.batches[i], fee)).not.toThrow()
     })
-    expect(c.confirmTransaction.mock.calls.map((args) => args[0])).toEqual(
-      hashes.map((blockhash, i) => ({ signature: `sig${i + 1}`, blockhash, lastValidBlockHeight: 99 + i })),
-    )
+    expect(c.getSignatureStatuses.mock.calls.map((args) => args[0])).toEqual(firstSends(c).map((sig) => [sig]))
   })
 
   it('signed txs whose blockhash expired while the user was signing are not broadcast', async () => {
@@ -648,32 +695,44 @@ describe('blockhash lifetime and confirmation', () => {
     expect(sent.map((p) => p.status)).toEqual(['confirmed', 'confirmed'])
   })
 
-  it('a tx that landed is reported confirmed even when confirmTransaction throws on expiry', async () => {
+  it('a tx that landed is reported confirmed by the final history check after its blockhash expired', async () => {
     const { ownerKp, fee, quote } = setup(3)
     const { c, connection } = mockConnection()
-    c.confirmTransaction.mockImplementation(async (s: unknown) => {
-      throw new TransactionExpiredBlockheightExceededError((s as { signature: string }).signature)
-    })
-    c.getSignatureStatuses.mockResolvedValue({
+    // The recent-status cache never shows it (e.g. a lagging node)…
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[], o?: unknown) => ({
       context: { slot: 120 },
-      value: [{ slot: 90, confirmations: null, err: null, confirmationStatus: 'finalized' }],
-    })
+      value: sigs.map((): SigStatus =>
+        (o as { searchTransactionHistory?: boolean } | undefined)?.searchTransactionHistory
+          ? { slot: 90, confirmations: null, err: null, confirmationStatus: 'finalized' }
+          : null,
+      ),
+    }))
+    // …and the block height is already past lastValidBlockHeight at the first poll.
+    c.getBlockHeight.mockResolvedValueOnce(50).mockResolvedValue(120)
     const { w } = wallet(ownerKp, 'all')
     const progress = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
-    expect(progress[0]).toMatchObject({ status: 'confirmed', signature: 'sig1' })
-    expect(c.getSignatureStatuses).toHaveBeenCalledWith(['sig1'], { searchTransactionHistory: true })
+    const [sig] = firstSends(c)
+    expect(progress[0]).toMatchObject({ status: 'confirmed', signature: sig })
+    expect(c.getSignatureStatuses).toHaveBeenCalledWith([sig], { searchTransactionHistory: true })
   })
 
   it('final status: an on-chain error is described; no status at all stays "expired"', async () => {
     const { ownerKp, fee, quote } = setup(25)
     const { c, connection } = mockConnection()
-    c.confirmTransaction.mockRejectedValue(new TransactionExpiredBlockheightExceededError('x'))
-    c.getSignatureStatuses
-      .mockResolvedValueOnce({
+    c.getBlockHeight.mockResolvedValueOnce(50).mockResolvedValue(500)
+    let history = 0
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[], o?: unknown) => {
+      if (!(o as { searchTransactionHistory?: boolean } | undefined)?.searchTransactionHistory) {
+        return { context: { slot: 1 }, value: sigs.map((): SigStatus => null) }
+      }
+      const k = history++
+      return {
         context: { slot: 1 },
-        value: [{ slot: 1, confirmations: null, err: { InstructionError: [2, { Custom: 11 }] }, confirmationStatus: 'confirmed' }],
-      })
-      .mockResolvedValueOnce({ context: { slot: 1 }, value: [null] })
+        value: sigs.map((): SigStatus =>
+          k === 0 ? { slot: 1, confirmations: null, err: { InstructionError: [2, { Custom: 11 }] }, confirmationStatus: 'confirmed' } : null,
+        ),
+      }
+    })
     const { w } = wallet(ownerKp, 'all')
     const progress = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
     expect(progress.map((p) => p.error)).toEqual([MESSAGES.hasTokens, MESSAGES.expired])
@@ -698,6 +757,220 @@ describe('blockhash lifetime and confirmation', () => {
     const progress = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
     expect(progress.map((p) => p.error)).toEqual([MESSAGES.hasTokens, MESSAGES.expired])
     expect(progress.every((p) => p.status === 'failed')).toBe(true)
+  })
+})
+
+// ── Confirmation by HTTP polling (works with any RPC; no websocket) ─────────
+
+const isHistory = (o: unknown) => Boolean((o as { searchTransactionHistory?: boolean } | undefined)?.searchTransactionHistory)
+
+describe('confirmation by HTTP polling', () => {
+  function oneBatch(n = 3) {
+    const { ownerKp, fee, quote } = setup(n)
+    const { c, connection } = mockConnection()
+    const { w } = wallet(ownerKp, 'all')
+    return { ownerKp, fee, quote, c, connection, w }
+  }
+
+  it('confirms via polling once the status reaches confirmed; never subscribes', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    let polls = 0
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[]) => {
+      const k = polls++
+      return {
+        context: { slot: 1 },
+        value: sigs.map((): SigStatus =>
+          k < 2 ? null : k < 4 ? { ...CONFIRMED, confirmationStatus: 'processed' } : CONFIRMED,
+        ),
+      }
+    })
+    const onSignature = vi.fn()
+    Object.assign(c, { onSignature, confirmTransaction: vi.fn() })
+    const { value: progress, elapsed } = await drive(runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} }))
+    expect(progress[0]).toMatchObject({ status: 'confirmed', signature: firstSends(c)[0] })
+    expect(polls).toBe(5) // null, null, processed, processed, confirmed
+    expect(elapsed).toBeGreaterThanOrEqual(4 * CONFIRM_POLL_MS)
+    expect(elapsed).toBeLessThan(5 * CONFIRM_POLL_MS)
+    expect(c.getSignatureStatuses.mock.calls.every((call) => !isHistory(call[1]))).toBe(true)
+    expect(onSignature).not.toHaveBeenCalled()
+    expect((c as unknown as { confirmTransaction: ReturnType<typeof vi.fn> }).confirmTransaction).not.toHaveBeenCalled()
+  })
+
+  it('rebroadcasts the identical verified bytes (no preflight, no RPC retries) while pending, then stops', async () => {
+    const { ownerKp, fee, quote, c, connection, w } = oneBatch()
+    let landedAt = Infinity
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[]) => ({
+      context: { slot: 1 },
+      value: sigs.map((): SigStatus => (Date.now() >= landedAt ? CONFIRMED : null)),
+    }))
+    const run = runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    landedAt = Date.now() + 10_000
+    const { value: progress } = await drive(run)
+    expect(progress[0].status).toBe('confirmed')
+
+    const calls = c.sendRawTransaction.mock.calls
+    expect(calls[0][1]).toEqual(SEND_OPTIONS)
+    const rebroadcasts = calls.slice(1)
+    expect(rebroadcasts.length).toBeGreaterThanOrEqual(3)
+    expect(rebroadcasts.length).toBeLessThanOrEqual(Math.ceil(10_000 / REBROADCAST_MS))
+    const first = Buffer.from(calls[0][0])
+    for (const [raw, opts] of rebroadcasts) {
+      expect(opts).toEqual(REBROADCAST_OPTIONS)
+      expect(opts).toEqual({ skipPreflight: true, maxRetries: 0 })
+      expect(Buffer.from(raw).equals(first)).toBe(true)
+    }
+    expect(() => assertSafeCleanupTransaction(VersionedTransaction.deserialize(first), ownerKp.publicKey, quote.batches[0], fee)).not.toThrow()
+
+    // Settled: nothing more is sent or polled.
+    const sends = calls.length
+    const polls = c.getSignatureStatuses.mock.calls.length
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(c.sendRawTransaction.mock.calls.length).toBe(sends)
+    expect(c.getSignatureStatuses.mock.calls.length).toBe(polls)
+  })
+
+  it('expiry: once block height passes lastValidBlockHeight, one history check, then "expired" and no more sends', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[]) => ({
+      context: { slot: 1 },
+      value: sigs.map((): SigStatus => null),
+    }))
+    let height = 50
+    c.getBlockHeight.mockImplementation(async () => height)
+    const run = runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    setTimeout(() => (height = 100), 7_000) // lastValidBlockHeight is 99
+    const { value: progress, elapsed } = await drive(run)
+    expect(progress[0]).toMatchObject({ status: 'failed', error: MESSAGES.expired })
+    expect(elapsed).toBeGreaterThanOrEqual(7_000)
+    expect(elapsed).toBeLessThan(7_000 + 2 * CONFIRM_POLL_MS)
+    const history = c.getSignatureStatuses.mock.calls.filter((call) => isHistory(call[1]))
+    expect(history).toEqual([[[firstSends(c)[0]], { searchTransactionHistory: true }]])
+    const sends = c.sendRawTransaction.mock.calls.length
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(c.sendRawTransaction.mock.calls.length).toBe(sends)
+  })
+
+  it('landed after all: the history check after expiry finds it → confirmed', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[], o?: unknown) => ({
+      context: { slot: 1 },
+      value: sigs.map((): SigStatus => (isHistory(o) ? { ...CONFIRMED, confirmationStatus: 'finalized' } : null)),
+    }))
+    let height = 50
+    c.getBlockHeight.mockImplementation(async () => height)
+    const run = runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    setTimeout(() => (height = 150), 4_000)
+    const { value: progress } = await drive(run)
+    expect(progress[0]).toMatchObject({ status: 'confirmed', signature: firstSends(c)[0] })
+  })
+
+  it('an error status is reported failed with a readable error (a processed error waits for confirmation)', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    let polls = 0
+    const err = { InstructionError: [2, { Custom: 17 }] }
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[]) => {
+      const k = polls++
+      return {
+        context: { slot: 1 },
+        value: sigs.map((): SigStatus => (k === 0 ? { ...CONFIRMED, err, confirmationStatus: 'processed' } : { ...CONFIRMED, err })),
+      }
+    })
+    const { value: progress } = await drive(runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} }))
+    expect(polls).toBe(2)
+    expect(progress[0]).toMatchObject({ status: 'failed', error: MESSAGES.frozen, signature: firstSends(c)[0] })
+  })
+
+  it('transient RPC errors while polling are retried', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    c.getSignatureStatuses
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockRejectedValueOnce(new Error('503 Service Unavailable'))
+    const { value: progress } = await drive(runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} }))
+    expect(progress[0].status).toBe('confirmed')
+    expect(c.getSignatureStatuses).toHaveBeenCalledTimes(3)
+  })
+
+  it('bounded: with block height unreadable it gives up after MAX_CONFIRM_MS (history checked) as "may still land"', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[]) => ({
+      context: { slot: 1 },
+      value: sigs.map((): SigStatus => null),
+    }))
+    c.getBlockHeight.mockRejectedValue(new Error('fetch failed'))
+    const { value: progress, elapsed } = await drive(runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} }), 500)
+    expect(progress[0]).toMatchObject({ status: 'failed', error: MESSAGES.unconfirmed })
+    expect(elapsed).toBeGreaterThanOrEqual(MAX_CONFIRM_MS)
+    expect(elapsed).toBeLessThan(MAX_CONFIRM_MS + 3 * CONFIRM_POLL_MS)
+    expect(c.getSignatureStatuses.mock.calls.filter((call) => isHistory(call[1]))).toHaveLength(1)
+  })
+
+  it('a hanging status request cannot stall confirmation forever', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    c.getSignatureStatuses.mockImplementation(() => new Promise(() => {}))
+    const { value: progress, elapsed } = await drive(runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} }), 1_000)
+    expect(progress[0]).toMatchObject({ status: 'failed', error: MESSAGES.unconfirmed })
+    expect(elapsed).toBeLessThan(MAX_CONFIRM_MS + 60_000)
+  })
+
+  it('abort while confirming: polling and rebroadcasts stop, the batch says "may still land", AbortError', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[]) => ({
+      context: { slot: 1 },
+      value: sigs.map((): SigStatus => null),
+    }))
+    const ac = new AbortController()
+    const rec = recorder()
+    const run = runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: rec.onProgress, signal: ac.signal })
+    setTimeout(() => ac.abort(), 5_000)
+    await expect(drive(run)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(rec.last()[0]).toMatchObject({ status: 'failed', error: MESSAGES.unconfirmed })
+    const sends = c.sendRawTransaction.mock.calls.length
+    const polls = c.getSignatureStatuses.mock.calls.length
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(c.sendRawTransaction.mock.calls.length).toBe(sends)
+    expect(c.getSignatureStatuses.mock.calls.length).toBe(polls)
+  })
+
+  it('several batches share one status poll, and each is rebroadcast with its own bytes', async () => {
+    const { ownerKp, fee, quote } = setup(45)
+    const { c, connection } = mockConnection()
+    const { w } = wallet(ownerKp, 'all')
+    let landedAt = Infinity
+    c.getSignatureStatuses.mockImplementation(async (sigs: string[]) => ({
+      context: { slot: 1 },
+      value: sigs.map((): SigStatus => (Date.now() >= landedAt ? CONFIRMED : null)),
+    }))
+    const run = runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    landedAt = Date.now() + 8_000
+    const { value: progress } = await drive(run)
+    expect(progress.map((p) => p.status)).toEqual(['confirmed', 'confirmed', 'confirmed'])
+    expect(c.getSignatureStatuses.mock.calls.some((call) => call[0].length === 3)).toBe(true)
+    const firstBytes = new Map(c.sendRawTransaction.mock.calls.filter((x) => x[1] === SEND_OPTIONS).map((x) => [sigOf(x[0]), Buffer.from(x[0])]))
+    expect(firstBytes.size).toBe(3)
+    for (const [raw, opts] of c.sendRawTransaction.mock.calls) {
+      if (opts === SEND_OPTIONS) continue
+      expect(opts).toEqual(REBROADCAST_OPTIONS)
+      expect(Buffer.from(raw).equals(firstBytes.get(sigOf(raw))!)).toBe(true)
+    }
+  })
+
+  it('ignores a signature returned by the RPC that is not the one inside the sent bytes', async () => {
+    const { fee, quote, c, connection, w } = oneBatch()
+    const bogus = base58(new Uint8Array(64).fill(7))
+    c.sendRawTransaction.mockResolvedValueOnce(bogus)
+    const { value: progress } = await drive(runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} }))
+    const real = sigOf(c.sendRawTransaction.mock.calls[0][0])
+    expect(progress[0]).toMatchObject({ status: 'confirmed', signature: real })
+    expect(c.getSignatureStatuses.mock.calls.flatMap((call) => call[0])).not.toContain(bogus)
+  })
+})
+
+describe('base58', () => {
+  it('encodes like Solana (leading zero bytes → "1")', () => {
+    const key = Keypair.generate().publicKey
+    expect(base58(key.toBytes())).toBe(key.toBase58())
+    expect(base58(new Uint8Array(32))).toBe(new PublicKey(new Uint8Array(32)).toBase58())
+    expect(base58(Uint8Array.from([0, 0, 1]))).toBe('112')
   })
 })
 
@@ -892,12 +1165,24 @@ describe('wire-level behaviour through a real Connection', () => {
           },
         }
       }
-      if (method === 'sendTransaction') return `5${'1'.repeat(86)}${++sig}`
+      if (method === 'sendTransaction') {
+        // A real RPC answers with the tx's own signature; this one answers garbage, which mopi must ignore.
+        return `5${'1'.repeat(86)}${++sig}`
+      }
+      if (method === 'getSignatureStatuses') {
+        return {
+          context: { slot: 11 },
+          value: (calls[calls.length - 1].params[0] as string[]).map(() => ({
+            slot: 11,
+            confirmations: 0,
+            err: null,
+            status: { Ok: null },
+            confirmationStatus: 'confirmed',
+          })),
+        }
+      }
       throw new Error(`unexpected ${method}`)
     }, calls)
-    const confirm = vi
-      .spyOn(conn, 'confirmTransaction')
-      .mockResolvedValue({ context: { slot: 11 }, value: { err: null } } as Awaited<ReturnType<Connection['confirmTransaction']>>)
 
     const progress = await executeCleanup({ connection: conn, wallet: signingWallet(kp), quote, fee, onProgress: () => {} })
     expect(progress.map((p) => p.status)).toEqual(['confirmed', 'confirmed'])
@@ -922,7 +1207,11 @@ describe('wire-level behaviour through a real Connection', () => {
       expect(() => assertSafeCleanupTransaction(tx, kp.publicKey, quote.batches[i], fee)).not.toThrow()
       expect(tx.serialize().length).toBeLessThanOrEqual(1232)
     })
-    expect(confirm.mock.calls[0][0]).toMatchObject({ blockhash: bh, lastValidBlockHeight: 1150 })
+    // Confirmation polled the signatures actually inside the sent bytes, over HTTP.
+    const sentSigs = sends.map((x) => base58(VersionedTransaction.deserialize(Buffer.from(x.params[0] as string, 'base64')).signatures[0]))
+    const polled = calls.filter((x) => x.method === 'getSignatureStatuses').flatMap((x) => x.params[0] as string[])
+    expect(new Set(polled)).toEqual(new Set(sentSigs))
+    expect(progress.map((p) => p.signature)).toEqual(sentSigs)
   })
 
   it('parses a realistic NonNativeHasBalance (0xb) simulation failure through web3.js', async () => {

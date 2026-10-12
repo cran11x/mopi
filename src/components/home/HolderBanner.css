@@ -80,6 +80,11 @@
   border-color: var(--forest);
 }
 
+.holder__ca {
+  flex: none;
+  margin-right: 4px;
+}
+
 @media (max-width: 1023px) {
   .holder {
     flex-wrap: wrap;
@@ -94,5 +99,15 @@
   .holder__cta {
     margin-left: auto;
     min-width: 0;
+  }
+}
+
+/* ≤1023px the banner wraps (text drops to line two); the CA stays on line one, beside the button. */
+@media (max-width: 1023px) {
+  .holder__ca {
+    margin-left: auto;
+  }
+  .holder__ca + .holder__cta {
+    margin-left: 0;
   }
 }

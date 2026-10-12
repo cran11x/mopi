@@ -5,6 +5,10 @@ interface ImportMetaEnv {
   readonly VITE_SOLANA_RPC_URL?: string
   /** Devnet RPC endpoint. */
   readonly VITE_SOLANA_DEVNET_RPC_URL?: string
+  /** Comma-separated https mainnet fallback endpoints ("none" disables; default: publicnode). */
+  readonly VITE_SOLANA_RPC_FALLBACKS?: string
+  /** Comma-separated https devnet fallback endpoints (default: none). */
+  readonly VITE_SOLANA_DEVNET_RPC_FALLBACKS?: string
   /** Wallet that receives the service fee. When empty, no service fee is charged. */
   readonly VITE_FEE_WALLET?: string
   /** Service fee in basis points of reclaimed account SOL (default 400 = 4%). */

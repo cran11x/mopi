@@ -1,0 +1,128 @@
+.copyaddr {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  min-width: 0;
+  color: var(--ink-2);
+  vertical-align: middle;
+}
+
+.copyaddr__tag {
+  flex: none;
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+.copyaddr__text {
+  min-width: 0;
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.copyaddr.is-full .copyaddr__text {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.copyaddr__btn,
+.copyaddr__link {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--ink-muted);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.copyaddr__btn:hover,
+.copyaddr__link:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.copyaddr__btn.is-copied {
+  color: var(--forest);
+}
+
+/* ----- full: the whole address in a quiet field ----- */
+.copyaddr--full {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.copyaddr--full .copyaddr__tag {
+  margin-right: 4px;
+}
+.copyaddr--full .copyaddr__text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.copyaddr--full .copyaddr__btn {
+  display: inline-flex;
+  gap: 6px;
+  width: auto;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.copyaddr--full .copyaddr__btn:hover {
+  background: var(--surface-muted);
+}
+.copyaddr--full .copyaddr__btn.is-copied {
+  border-color: var(--mint-300);
+  background: var(--mint-50);
+  color: var(--forest-strong);
+}
+.copyaddr--full .copyaddr__link {
+  width: 36px;
+  height: 36px;
+}
+
+@media (max-width: 720px) {
+  .copyaddr__btn,
+  .copyaddr__link {
+    width: 36px;
+    height: 36px;
+  }
+  /* phones: address on its own lines, a full-width Copy button below */
+  .copyaddr--full {
+    flex-wrap: wrap;
+    padding: 10px 10px 10px 12px;
+  }
+  .copyaddr--full .copyaddr__tag {
+    display: none;
+  }
+  .copyaddr--full .copyaddr__text {
+    flex-basis: 100%;
+    font-size: 13.5px;
+  }
+  .copyaddr--full .copyaddr__btn {
+    flex: 1;
+    justify-content: center;
+    height: 40px;
+  }
+  .copyaddr--full .copyaddr__link {
+    width: 40px;
+    height: 40px;
+  }
+}

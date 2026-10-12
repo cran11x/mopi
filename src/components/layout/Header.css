@@ -92,6 +92,27 @@
   gap: 8px;
 }
 
+/* Subtle social icon links next to the network pill. */
+.hsocial {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.hsocial:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+.hsocial + .hsocial {
+  margin-left: -6px;
+}
+
 @media (max-width: 1023px) {
   .site-nav ul {
     gap: 0;
@@ -236,4 +257,31 @@
   font-size: 12.5px;
   color: var(--ink-muted);
   text-align: center;
+}
+.mobile-panel__social {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mobile-panel__social-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.mobile-panel__social-link:hover {
+  background: var(--surface-muted);
 }

@@ -1,6 +1,6 @@
 import { useCallback, type ReactNode } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
-import { useCleaner } from '../../state/cleaner'
+import { FEE_WALLET_UNFUNDED_MESSAGE, useCleaner } from '../../state/cleaner'
 import { useCluster } from '../../state/cluster'
 import { useWalletModal } from '../../state/walletModal'
 import { explorerTxUrl } from '../../config'
@@ -103,7 +103,8 @@ export function ReviewModal() {
 /* ---------- Review ---------- */
 
 function ReviewStep() {
-  const { quote, scan, feeConfig, executeBlocker, startCleanup, closeReview, runScan } = useCleaner()
+  const { quote, scan, feeConfig, executeBlocker, startCleanup, closeReview, runScan, checkingFees, quoteNotice } =
+    useCleaner()
   const wallet = useWallet()
   const walletModal = useWalletModal()
   if (!quote || !scan) return null
@@ -161,6 +162,14 @@ function ReviewStep() {
       )
       blockerNote = 'Select at least one eligible account first.'
       break
+    case 'fee-wallet-unfunded':
+      action = (
+        <Button variant="primary" disabled>
+          Approve in wallet
+        </Button>
+      )
+      blockerNote = FEE_WALLET_UNFUNDED_MESSAGE
+      break
     case 'stale-scan':
       action = (
         <Button variant="primary" onClick={() => void runScan(scan.owner)} iconLeft="refresh">
@@ -170,8 +179,16 @@ function ReviewStep() {
       blockerNote = 'These results are from another network or are still refreshing. Rescan before approving.'
       break
     case null:
+      // Disabled while current network fees / the fee wallet are being checked,
+      // so what gets approved is always the final quote.
       action = (
-        <Button variant="primary" onClick={() => void startCleanup()} iconRight="arrow-right">
+        <Button
+          variant="primary"
+          onClick={() => void startCleanup()}
+          iconRight="arrow-right"
+          disabled={checkingFees}
+          aria-describedby={checkingFees ? 'review-checking' : undefined}
+        >
           Approve in wallet
         </Button>
       )
@@ -229,8 +246,18 @@ function ReviewStep() {
       </h3>
       <Batches quote={quote} />
 
+      {quoteNotice && executeBlocker === null && (
+        <p className="review__blocker" role="alert">
+          <Icon name="alert" size={16} />
+          <span>{quoteNotice}</span>
+        </p>
+      )}
+
       {blockerNote && (
-        <p className={cx('review__blocker', executeBlocker === 'demo' && 'review__blocker--info')} role="status">
+        <p
+          className={cx('review__blocker', executeBlocker === 'demo' && 'review__blocker--info')}
+          role={executeBlocker === 'fee-wallet-unfunded' ? 'alert' : 'status'}
+        >
           <Icon name={executeBlocker === 'demo' ? 'info' : 'alert'} size={16} />
           <span>{blockerNote}</span>
         </p>
@@ -245,9 +272,14 @@ function ReviewStep() {
           </Button>
           {action}
         </div>
-        {executeBlocker === null && (
-          <p className="review__fine review__fine--center">Your wallet shows the final amounts before you approve.</p>
-        )}
+        {executeBlocker === null &&
+          (checkingFees ? (
+            <p className="review__fine review__fine--center" id="review-checking" role="status">
+              Checking current network fees…
+            </p>
+          ) : (
+            <p className="review__fine review__fine--center">Your wallet shows the final amounts before you approve.</p>
+          ))}
       </div>
     </>
   )

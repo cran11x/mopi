@@ -27,6 +27,8 @@ export type IconName =
   | 'alert'
   | 'sparkle'
   | 'logout'
+  | 'x'
+  | 'telegram'
 
 const PATHS: Record<IconName, ReactNode> = {
   search: (
@@ -127,6 +129,22 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14" />
       <path d="M10.5 12h10m-3.5-3.5L20.5 12 17 15.5" />
+    </>
+  ),
+  // X (formerly Twitter) brand mark: a filled glyph, scaled to sit with the stroke set.
+  x: (
+    <path
+      fill="currentColor"
+      stroke="none"
+      transform="translate(2.6 2.6) scale(0.78)"
+      d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.65l-5.21-6.82-5.97 6.82H1.68l7.73-8.84L1.25 2.25h6.83l4.71 6.23 5.45-6.23Zm-1.16 17.52h1.83L7.08 4.13H5.12l11.96 15.64Z"
+    />
+  ),
+  // Paper plane, drawn in the stroke style.
+  telegram: (
+    <>
+      <path d="M20.5 4 3.5 10.7c-.6.2-.6 1.1 0 1.3l4.3 1.5 1.6 5.1c.2.6.9.7 1.3.3l2.4-2.3 4.4 3.3c.5.4 1.2.1 1.3-.5L21.4 5c.1-.7-.5-1.2-.9-1Z" />
+      <path d="m7.8 13.5 9.4-6.3-6.6 7.4" />
     </>
   ),
 }

@@ -7,6 +7,8 @@ import { useCleaner } from '../state/cleaner'
 import { useWalletModal } from '../state/walletModal'
 import { LinkButton, Page, PageIntro, Section } from '../components/layout/Page'
 import { Button, Card, Chip, Icon } from '../components/ui'
+import { CopyAddress } from '../components/ui/CopyAddress'
+import { tokenExplorerUrl } from '../socials'
 import { exampleAccounts, illustrativeFeeConfig } from '../lib/examples'
 import './BenefitsPage.css'
 
@@ -47,6 +49,8 @@ export function BenefitsPage() {
         )}
         <Chip tone="outline">Min. {fmtTokens(CONFIG.holderMin)} $MOPI</Chip>
       </PageIntro>
+
+      {CONFIG.mopiMint && <ContractAddress mint={CONFIG.mopiMint} />}
 
       <HolderStatusPanel />
 
@@ -142,6 +146,29 @@ export function BenefitsPage() {
         </span>
       </p>
     </Page>
+  )
+}
+
+/** The official $MOPI contract address, with a scam warning. Only rendered once the mint is configured. */
+function ContractAddress({ mint }: { mint: string }) {
+  return (
+    <section className="benefits-ca" aria-labelledby="benefits-ca-title">
+      <div className="benefits-ca__head">
+        <h2 id="benefits-ca-title" className="benefits-ca__title">
+          Official $MOPI contract address
+        </h2>
+        <a className="benefits-ca__solscan" href={tokenExplorerUrl(mint)} target="_blank" rel="noopener noreferrer">
+          Solscan
+          <Icon name="external" size={14} />
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      </div>
+      <CopyAddress address={mint} tag="CA" what="$MOPI contract address" variant="full" />
+      <p className="benefits-ca__note">
+        <Icon name="shield" size={16} />
+        <span>Always verify the CA here before buying — mopi will never DM you.</span>
+      </p>
+    </section>
   )
 }
 

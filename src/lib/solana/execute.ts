@@ -48,10 +48,24 @@ export const MESSAGES = {
   feeWalletUnfunded:
     'The service fee wallet is not funded yet (it needs at least 0.00089088 SOL to receive fees), so this transaction can’t succeed — please tell the mopi operator',
   nativeChanged: 'A wrapped SOL account changed since the scan — rescan and try again',
+  unconfirmed:
+    'Couldn’t confirm the transaction in time — it may still land. Check the transaction link, then rescan',
 } as const
 
-/** Send options: preflight on (catches state that changed since simulation, and dead blockhashes, for free); RPC retries until expiry. */
+/** First send: preflight on (catches state that changed since simulation, and dead blockhashes, for free); RPC retries until expiry. */
 export const SEND_OPTIONS = { skipPreflight: false, preflightCommitment: 'confirmed' } as const
+
+/** Rebroadcasts of the same signed bytes while unconfirmed: no preflight (it already passed), no RPC-side retry queue. */
+export const REBROADCAST_OPTIONS = { skipPreflight: true, maxRetries: 0 } as const
+
+/** Confirmation is polled over HTTP (no websocket): signature statuses this often… */
+export const CONFIRM_POLL_MS = 1_500
+/** …and the exact verified bytes are re-sent at most this often until the tx settles. */
+export const REBROADCAST_MS = 2_500
+/** Hard bound on waiting for one signature (a blockhash lives ~60–90 s), in case block height is unreadable. */
+export const MAX_CONFIRM_MS = 100_000
+/** Each confirmation RPC call (status, block height) gives up after this long. */
+export const CONFIRM_RPC_TIMEOUT_MS = 10_000
 
 /** Extra context for describeTransactionError. */
 export interface TransactionErrorContext {
@@ -206,11 +220,30 @@ export function isUserRejection(err: unknown): boolean {
   return name === 'WalletSignTransactionError' || (typeof message === 'string' && /reject|declin|cancel/i.test(message))
 }
 
-function isBlockheightExceeded(err: unknown): boolean {
-  if (err && typeof err === 'object' && (err as { name?: unknown }).name === 'TransactionExpiredBlockheightExceededError') {
-    return true
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+/** Base58 (Bitcoin alphabet), as Solana encodes signatures. */
+export function base58(bytes: Uint8Array): string {
+  const digits: number[] = []
+  for (const byte of bytes) {
+    let carry = byte
+    for (let j = 0; j < digits.length; j++) {
+      carry += digits[j] << 8
+      digits[j] = carry % 58
+      carry = (carry / 58) | 0
+    }
+    while (carry > 0) {
+      digits.push(carry % 58)
+      carry = (carry / 58) | 0
+    }
   }
-  return /block ?height exceeded|has expired/i.test(errMessage(err))
+  let out = ''
+  for (const byte of bytes) {
+    if (byte !== 0) break
+    out += '1'
+  }
+  for (let k = digits.length - 1; k >= 0; k--) out += BASE58_ALPHABET[digits[k]]
+  return out
 }
 
 /** An immutable copy of what the wallet returned: the exact wire bytes and the tx decoded from them. */
@@ -264,6 +297,189 @@ function nativeStillEmpty(
   return tokenInfo.isNative === true && tokenInfo.owner === ownerB58 && amount === '0'
 }
 
+/** How a sent signature ended. */
+export type ConfirmOutcome =
+  | { status: 'confirmed' }
+  | { status: 'failed'; err: TransactionError }
+  /** Block height passed the blockhash's lastValidBlockHeight and the tx is not in history: it can never land. */
+  | { status: 'expired' }
+  /** MAX_CONFIRM_MS passed, or the run was aborted, without a final answer: it may still land. */
+  | { status: 'unknown' }
+
+type StatusConnection = Pick<Connection, 'getSignatureStatuses' | 'getBlockHeight' | 'sendRawTransaction'>
+
+interface Tracked {
+  signature: string
+  bytes: Uint8Array
+  lastValidBlockHeight: number
+  deadline: number
+  lastSentAt: number
+  resolve: (outcome: ConfirmOutcome) => void
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('RPC request timed out')), ms)
+    }),
+  ]).finally(() => clearTimeout(timer))
+}
+
+/** getSignatureStatuses accepts at most this many signatures per call. */
+const MAX_STATUS_BATCH = 256
+
+type StatusValue = { err: TransactionError | null; confirmationStatus?: string } | null
+
+/** Statuses for `signatures`, by index, in chunks of MAX_STATUS_BATCH (a failed chunk rejects). */
+async function fetchStatuses(
+  connection: StatusConnection,
+  signatures: string[],
+  history: boolean,
+): Promise<ReadonlyArray<StatusValue | undefined>> {
+  const out: Array<StatusValue | undefined> = []
+  for (let k = 0; k < signatures.length; k += MAX_STATUS_BATCH) {
+    const chunk = signatures.slice(k, k + MAX_STATUS_BATCH)
+    const res = await withTimeout(
+      history
+        ? connection.getSignatureStatuses(chunk, { searchTransactionHistory: true })
+        : connection.getSignatureStatuses(chunk),
+      CONFIRM_RPC_TIMEOUT_MS,
+    )
+    const values = Array.isArray(res?.value) ? res.value : []
+    chunk.forEach((_, j) => out.push(values[j]))
+  }
+  return out
+}
+
+const landed = (s: { confirmationStatus?: string } | null | undefined) =>
+  s?.confirmationStatus === 'confirmed' || s?.confirmationStatus === 'finalized'
+
+/**
+ * Confirms sent transactions by HTTP polling only (works with any RPC, no
+ * websocket): one getSignatureStatuses for every pending signature each
+ * CONFIRM_POLL_MS, one getBlockHeight('confirmed') for expiry, and a
+ * rebroadcast of each transaction's own verified bytes (skipPreflight,
+ * maxRetries 0) every REBROADCAST_MS while it is pending. An expired or
+ * timed-out signature gets one last getSignatureStatuses with
+ * searchTransactionHistory before it is reported. Never sends anything but the
+ * bytes passed to track().
+ */
+export function createSignatureConfirmer(connection: StatusConnection, signal?: AbortSignal) {
+  const pending = new Map<string, Tracked>()
+  let running = false
+
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', done)
+        resolve()
+      }
+      const timer = setTimeout(done, ms)
+      signal?.addEventListener('abort', done, { once: true })
+    })
+
+  const settle = (entry: Tracked, outcome: ConfirmOutcome) => {
+    if (pending.get(entry.signature) !== entry) return
+    pending.delete(entry.signature)
+    entry.resolve(outcome)
+  }
+
+  /** Last word (with transaction history) on signatures that are out of time. */
+  const finalCheck = async (entries: Tracked[], otherwise: ConfirmOutcome) => {
+    if (entries.length === 0) return
+    let values: ReadonlyArray<StatusValue | undefined> = []
+    try {
+      values = await fetchStatuses(
+        connection,
+        entries.map((e) => e.signature),
+        true,
+      )
+    } catch {
+      values = []
+    }
+    entries.forEach((entry, k) => {
+      const st = values[k]
+      if (st?.err) settle(entry, { status: 'failed', err: st.err })
+      else if (landed(st)) settle(entry, { status: 'confirmed' })
+      else settle(entry, otherwise)
+    })
+  }
+
+  const tick = async () => {
+    const entries = [...pending.values()]
+    try {
+      const values = await fetchStatuses(
+        connection,
+        entries.map((e) => e.signature),
+        false,
+      )
+      entries.forEach((entry, k) => {
+        const st = values[k]
+        if (!landed(st)) return // unknown or only processed: keep waiting
+        settle(entry, st?.err ? { status: 'failed', err: st.err } : { status: 'confirmed' })
+      })
+    } catch {
+      // Transient RPC trouble: try again next round (bounded by the deadline).
+    }
+
+    const open = entries.filter((e) => pending.get(e.signature) === e)
+    if (open.length === 0) return
+    let height: number | null = null
+    try {
+      const h = await withTimeout(connection.getBlockHeight('confirmed'), CONFIRM_RPC_TIMEOUT_MS)
+      if (typeof h === 'number' && Number.isFinite(h)) height = h
+    } catch {
+      height = null
+    }
+    const now = Date.now()
+    const expired = height === null ? [] : open.filter((e) => height > e.lastValidBlockHeight)
+    const timedOut = open.filter((e) => !expired.includes(e) && now >= e.deadline)
+    await finalCheck(expired, { status: 'expired' })
+    await finalCheck(timedOut, { status: 'unknown' })
+
+    if (signal?.aborted) return
+    const sendAt = Date.now()
+    for (const entry of pending.values()) {
+      if (sendAt - entry.lastSentAt < REBROADCAST_MS) continue
+      entry.lastSentAt = sendAt
+      // Same verified bytes; errors (already processed, dead blockhash…) are expected and ignored.
+      connection.sendRawTransaction(entry.bytes, REBROADCAST_OPTIONS).catch(() => {})
+    }
+  }
+
+  const loop = async () => {
+    running = true
+    try {
+      while (pending.size > 0) {
+        if (signal?.aborted) {
+          for (const entry of [...pending.values()]) settle(entry, { status: 'unknown' })
+          break
+        }
+        await tick()
+        if (pending.size === 0) break
+        await sleep(CONFIRM_POLL_MS)
+      }
+    } finally {
+      running = false
+    }
+  }
+
+  return {
+    /** Starts watching `signature` (already sent once as `bytes`). Resolves; never rejects. */
+    track(signature: string, bytes: Uint8Array, lastValidBlockHeight: number): Promise<ConfirmOutcome> {
+      return new Promise<ConfirmOutcome>((resolve) => {
+        const now = Date.now()
+        pending.get(signature)?.resolve({ status: 'unknown' })
+        pending.set(signature, { signature, bytes, lastValidBlockHeight, deadline: now + MAX_CONFIRM_MS, lastSentAt: now, resolve })
+        if (!running) void loop()
+      })
+    },
+  }
+}
+
 const UNSENT: ReadonlySet<BatchStatus> = new Set(['pending', 'simulating', 'awaiting-signature'])
 
 /**
@@ -271,7 +487,8 @@ const UNSENT: ReadonlySet<BatchStatus> = new Set(['pending', 'simulating', 'awai
  * signAllTransactions prompt when available, else one prompt per batch, each
  * with a fresh blockhash), snapshots + re-verifies what the wallet returned,
  * drops expired blockhashes and changed wSOL accounts, sends exactly the
- * verified bytes (with preflight) and confirms every batch. A failed
+ * verified bytes (with preflight) and confirms every batch by HTTP polling,
+ * rebroadcasting the same bytes until it lands or its blockhash expires. A failed
  * simulation marks that batch failed and skips it; it never sends a
  * transaction that failed simulation.
  * Resolves with the final progress (never rejects for per-batch failures;
@@ -306,6 +523,7 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
 
   // Confirmations of already-sent transactions; awaited before returning or throwing.
   const pendingConfirms: Promise<void>[] = []
+  const confirmer = createSignatureConfirmer(connection, signal)
   const settle = () => Promise.allSettled(pendingConfirms)
 
   const abortIfNeeded = async () => {
@@ -463,50 +681,30 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
     return indices.filter((i) => !bad.has(i))
   }
 
-  /** Last word on a signature whose confirmation errored (e.g. a missed websocket notification). */
-  const finalStatus = async (signature: string): Promise<'confirmed' | { err: TransactionError } | null> => {
-    try {
-      const res = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true })
-      const st = res?.value?.[0]
-      if (!st) return null
-      if (st.err) return { err: st.err }
-      if (st.confirmationStatus === 'confirmed' || st.confirmationStatus === 'finalized') return 'confirmed'
-      return null
-    } catch {
-      return null
-    }
-  }
-
   /** Sends exactly the verified bytes and queues the confirmation. */
   const send = async (i: number, snap: SignedSnapshot) => {
     set(i, { status: 'sending' })
     const programs = instructionPrograms(snap.tx)
     const ctx = errorContext(snap.tx)
-    let signature: string
+    // The signature is read from the verified bytes, not taken from the RPC's
+    // answer: a faulty endpoint can't make us watch (and report) another tx.
+    const signature = base58(snap.tx.signatures[0])
     try {
-      signature = await connection.sendRawTransaction(snap.bytes, SEND_OPTIONS)
+      await connection.sendRawTransaction(snap.bytes, SEND_OPTIONS)
     } catch (err) {
       set(i, { status: 'failed', error: describeSendError(err, programs, ctx) })
       return
     }
     set(i, { signature })
-    const { blockhash, lastValidBlockHeight } = lifetimes[i]
+    const { lastValidBlockHeight } = lifetimes[i]
     pendingConfirms.push(
-      (async () => {
-        try {
-          const res = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed')
-          if (res.value.err) {
-            set(i, { status: 'failed', error: describeTransactionError(res.value.err, null, programs, ctx) })
-          } else {
-            set(i, { status: 'confirmed' })
-          }
-        } catch (err) {
-          const final = await finalStatus(signature)
-          if (final === 'confirmed') set(i, { status: 'confirmed' })
-          else if (final) set(i, { status: 'failed', error: describeTransactionError(final.err, null, programs, ctx) })
-          else set(i, { status: 'failed', error: isBlockheightExceeded(err) ? MESSAGES.expired : errMessage(err) })
-        }
-      })(),
+      confirmer.track(signature, snap.bytes, lastValidBlockHeight).then((outcome) => {
+        if (outcome.status === 'confirmed') set(i, { status: 'confirmed' })
+        else if (outcome.status === 'failed') {
+          set(i, { status: 'failed', error: describeTransactionError(outcome.err, null, programs, ctx) })
+        } else if (outcome.status === 'expired') set(i, { status: 'failed', error: MESSAGES.expired })
+        else set(i, { status: 'failed', error: MESSAGES.unconfirmed })
+      }),
     )
   }
 
@@ -566,5 +764,7 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
   }
 
   await settle()
+  // Aborted while confirming: unfinished batches already say "may still land".
+  await abortIfNeeded()
   return progress
 }

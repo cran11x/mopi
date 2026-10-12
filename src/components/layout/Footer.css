@@ -77,3 +77,51 @@
     padding: 0 6px;
   }
 }
+
+/* ----- socials + contract address (only when configured) ----- */
+.site-footer__social {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+.site-footer__social::before {
+  content: '';
+  width: 1px;
+  height: 14px;
+  margin-right: 8px;
+  background: var(--line-strong);
+}
+.site-footer__links a.site-footer__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-xs);
+  color: var(--ink-muted);
+}
+.site-footer__links a.site-footer__icon:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
+  text-decoration: none;
+}
+.site-footer__ca {
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin-top: -4px;
+}
+
+@media (max-width: 720px) {
+  .site-footer__social::before {
+    margin-right: 4px;
+  }
+  .site-footer__links a.site-footer__icon {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+  }
+  .site-footer__ca {
+    margin-top: 0;
+  }
+}

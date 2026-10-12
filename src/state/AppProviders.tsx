@@ -2,6 +2,9 @@ import type { ReactNode } from 'react'
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react'
 import type { WalletError } from '@solana/wallet-adapter-base'
 import type { ConnectionConfig } from '@solana/web3.js'
+import { RPC_FALLBACKS, RPC_URLS } from '../config'
+import { createFailoverFetch } from '../lib/solana/rpc'
+import type { Cluster } from '../lib/types'
 import { ClusterProvider, useCluster } from './cluster'
 import { WalletModalProvider } from './walletModal'
 import { CleanerProvider } from './cleaner'
@@ -10,30 +13,25 @@ import { CleanerProvider } from './cleaner'
 // themselves, so no adapter list is needed.
 const NO_ADAPTERS: never[] = []
 
-/** Backoff before each retry of an HTTP 429 (rate limited) RPC answer. */
-const RATE_LIMIT_RETRIES_MS = [600, 1200]
-
 /**
- * web3.js on its own retries a 429 four times (0.5 → 4 s, about 15 s of
- * spinner) before the user hears anything. Retry briefly here instead, then
- * let the 429 through so the app can say "rate limited" within ~2 s.
+ * One Connection config per cluster, built once (stable identity:
+ * ConnectionProvider rebuilds its Connection whenever `config` changes). Its
+ * fetch fails over to the configured fallback endpoints on network errors and
+ * HTTP 5xx / 403 / 429 and remembers the endpoint that answered, per cluster.
+ * A 429 is first retried briefly (0.6 s, 1.2 s) instead of web3.js's own
+ * ~15 s backoff, so the app can say "rate limited" quickly.
  */
-const fetchWithShortRetry: NonNullable<ConnectionConfig['fetch']> = async (input, init) => {
-  let res = await fetch(input, init)
-  for (const wait of RATE_LIMIT_RETRIES_MS) {
-    if (res.status !== 429) break
-    await new Promise((r) => setTimeout(r, wait))
-    res = await fetch(input, init)
-  }
-  return res
+const CONNECTION_CONFIGS: Record<Cluster, ConnectionConfig> = {
+  'mainnet-beta': connectionConfigFor('mainnet-beta'),
+  devnet: connectionConfigFor('devnet'),
 }
 
-// Stable identity: ConnectionProvider rebuilds its Connection whenever
-// `config` changes, so an inline object would create one per render.
-const CONNECTION_CONFIG: ConnectionConfig = {
-  commitment: 'confirmed',
-  disableRetryOnRateLimit: true,
-  fetch: fetchWithShortRetry,
+function connectionConfigFor(cluster: Cluster): ConnectionConfig {
+  return {
+    commitment: 'confirmed',
+    disableRetryOnRateLimit: true,
+    fetch: createFailoverFetch({ endpoints: [RPC_URLS[cluster], ...RPC_FALLBACKS[cluster]] }),
+  }
 }
 
 function onWalletError(error: WalletError) {
@@ -41,11 +39,11 @@ function onWalletError(error: WalletError) {
 }
 
 function SolanaProviders({ children }: { children: ReactNode }) {
-  const { rpcUrl } = useCluster()
+  const { rpcUrl, cluster } = useCluster()
   // A new endpoint yields a new Connection; the cleaner re-scans on cluster
   // change, so the tree is not remounted (menus and wallet state survive).
   return (
-    <ConnectionProvider endpoint={rpcUrl} config={CONNECTION_CONFIG}>
+    <ConnectionProvider endpoint={rpcUrl} config={CONNECTION_CONFIGS[cluster]}>
       <WalletProvider wallets={NO_ADAPTERS} autoConnect onError={onWalletError}>
         <WalletModalProvider>
           <CleanerProvider>{children}</CleanerProvider>

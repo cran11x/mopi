@@ -1,6 +1,8 @@
+import { CONFIG } from '../../config'
 import { useCleaner } from '../../state/cleaner'
 import { routeHref } from '../../lib/router'
 import { Icon, cx } from '../ui'
+import { CopyAddress } from '../ui/CopyAddress'
 import { Mascot } from '../mascot/Mascot'
 import './HolderBanner.css'
 
@@ -28,6 +30,9 @@ export function HolderBanner({ className }: { className?: string }) {
           ? 'Lower service fee applied. Saved wallet watchlists unlocked.'
           : 'Lower service fee. Saved wallet watchlists.'}
       </p>
+      {CONFIG.mopiMint && (
+        <CopyAddress address={CONFIG.mopiMint} tag="CA" what="$MOPI contract address" className="holder__ca" />
+      )}
       <a className="holder__cta" href={routeHref('benefits')}>
         View benefits
         <Icon name="arrow-right" size={14} />

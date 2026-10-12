@@ -4,6 +4,7 @@ import { CLUSTER_LABELS } from '../../config'
 import { shortAddress } from '../../lib/format'
 import { ROUTE_LABELS, routeHref, useRoute, type Route } from '../../lib/router'
 import type { Cluster } from '../../lib/types'
+import { SOCIAL_LINKS } from '../../socials'
 import { useCluster } from '../../state/cluster'
 import { useWalletModal } from '../../state/walletModal'
 import { Logo } from '../mascot/Mascot'
@@ -96,6 +97,19 @@ export function Header() {
         </nav>
 
         <div className="site-header__actions site-header__actions--desktop">
+          {SOCIAL_LINKS.map((l) => (
+            <a
+              key={l.key}
+              href={l.href}
+              className="hsocial"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={l.label}
+              title={l.label}
+            >
+              <Icon name={l.icon} size={18} />
+            </a>
+          ))}
           <NetworkSelect variant="pill" />
           <ConnectButton variant="full" />
         </div>
@@ -189,6 +203,30 @@ function MobilePanel({ route, onClose }: { route: Route; onClose: () => void }) 
             ))}
           </div>
         </div>
+
+        {SOCIAL_LINKS.length > 0 && (
+          <div className="mobile-panel__group">
+            <p className="mobile-panel__label" id="mobile-community-label">
+              Community
+            </p>
+            <ul className="mobile-panel__social" aria-labelledby="mobile-community-label">
+              {SOCIAL_LINKS.map((l) => (
+                <li key={l.key}>
+                  <a
+                    href={l.href}
+                    className="mobile-panel__social-link"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Icon name={l.icon} size={18} />
+                    <span>{l.cta}</span>
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mobile-panel__group">
           {publicKey ? (

@@ -28,6 +28,44 @@ export const RPC_URLS: Record<Cluster, string> = {
   devnet: env.VITE_SOLANA_DEVNET_RPC_URL?.trim() || 'https://api.devnet.solana.com',
 }
 
+/** Free public mainnet endpoint (CORS enabled) used when the primary fails, unless configured otherwise. */
+export const DEFAULT_MAINNET_RPC_FALLBACK = 'https://solana-rpc.publicnode.com'
+
+/**
+ * Comma-separated https endpoints. Unset or empty → `fallback`; "none" → no
+ * fallbacks. Invalid or non-https entries and the primary itself are dropped.
+ */
+export function readRpcFallbacks(value: string | undefined, fallback: readonly string[], primary: string): string[] {
+  const raw = value === undefined || value.trim() === '' ? fallback.join(',') : value
+  if (raw.trim().toLowerCase() === 'none') return []
+  const norm = (u: string) => u.trim().replace(/\/+$/, '')
+  const out: string[] = []
+  for (const entry of raw.split(',')) {
+    const url = entry.trim()
+    if (!url) continue
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      console.warn(`[mopi] ignoring invalid RPC fallback URL: ${url}`)
+      continue
+    }
+    if (parsed.protocol !== 'https:') {
+      console.warn(`[mopi] ignoring non-https RPC fallback URL: ${url}`)
+      continue
+    }
+    if (norm(url) === norm(primary) || out.some((u) => norm(u) === norm(url))) continue
+    out.push(url)
+  }
+  return out
+}
+
+/** Endpoints tried, in order, after the primary RPC fails (network error, HTTP 5xx / 403 / 429). */
+export const RPC_FALLBACKS: Record<Cluster, string[]> = {
+  'mainnet-beta': readRpcFallbacks(env.VITE_SOLANA_RPC_FALLBACKS, [DEFAULT_MAINNET_RPC_FALLBACK], RPC_URLS['mainnet-beta']),
+  devnet: readRpcFallbacks(env.VITE_SOLANA_DEVNET_RPC_FALLBACKS, [], RPC_URLS.devnet),
+}
+
 export const CLUSTER_LABELS: Record<Cluster, string> = {
   'mainnet-beta': 'Mainnet',
   devnet: 'Devnet',
@@ -47,8 +85,14 @@ export const CONFIG = {
 
   /** Solana base fee per signature. */
   baseFeeLamportsPerSignature: 5_000,
-  /** Priority fee price, micro-lamports per CU. */
+  /**
+   * Priority fee price floor, micro-lamports per CU. Demo quotes use exactly
+   * this; real cleanups use the recent-fee estimate clamped to
+   * [priorityFeeMicroLamports, maxPriorityFeeMicroLamports].
+   */
   priorityFeeMicroLamports: 20_000,
+  /** Highest priority fee price a real cleanup will pay, micro-lamports per CU. */
+  maxPriorityFeeMicroLamports: 1_000_000,
   /** CU reserved per CloseAccount (Token-2022 closes cost more than SPL Token). */
   computeUnitsPerClose: 6_000,
   /** CU reserved for compute-budget + fee transfer instructions. */
