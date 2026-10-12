@@ -23,6 +23,9 @@ import {
   buildCleanupTransactions,
   withBlockhash,
 } from './transactions'
+import { describeWalletError, isUserRejection } from './walletErrors'
+
+export { isUserRejection } from './walletErrors'
 
 export interface ExecuteCleanupParams {
   connection: Connection
@@ -37,13 +40,16 @@ export interface ExecuteCleanupParams {
 export const MESSAGES = {
   hasTokens: 'An account received tokens since the scan — rescan and try again',
   noSolForFee: 'Not enough SOL in the wallet to pay the network fee',
+  feePayerRent:
+    'Not enough SOL in the wallet to pay the network fee — Solana requires a wallet to keep at least 0.00089088 SOL after paying it',
   alreadyClosed: 'An account was already closed — rescan',
   frozen: 'An account was frozen since the scan — rescan',
   ownerChanged: 'An account’s owner or close authority changed since the scan — rescan',
   rent: 'The transaction would leave an account below Solana’s rent-exempt minimum',
   blockhash: 'The network didn’t recognise the transaction’s blockhash — try again',
   expired: 'Transaction expired before it landed — try again',
-  walletModified: 'Wallet modified the transaction; not sent',
+  walletModified:
+    'Your wallet changed the transaction (it added instructions or changed the fee settings), so mopi didn’t send it. Nothing was charged. Turn off your wallet’s custom priority fee or transaction protection for this site, or try another wallet.',
   walletBadResponse: 'The wallet returned an unexpected response; not sent',
   feeWalletUnfunded:
     'The service fee wallet is not funded yet (it needs at least 0.00089088 SOL to receive fees), so this transaction can’t succeed — please tell the mopi operator',
@@ -66,6 +72,16 @@ export const REBROADCAST_MS = 2_500
 export const MAX_CONFIRM_MS = 100_000
 /** Each confirmation RPC call (status, block height) gives up after this long. */
 export const CONFIRM_RPC_TIMEOUT_MS = 10_000
+/** The rebroadcast interval doubles after every this many resends of a signature… */
+export const REBROADCAST_BACKOFF_EVERY = 3
+/** …up to this. */
+export const REBROADCAST_MAX_MS = 10_000
+/** At most this many rebroadcasts per poll round (oldest first), so many batches can't flood the RPC. */
+export const MAX_REBROADCASTS_PER_TICK = 4
+/** After a rebroadcast is rate limited (HTTP 429), rebroadcasts pause this long. */
+export const REBROADCAST_RATE_LIMIT_PAUSE_MS = 10_000
+/** First sends run with at most this many in flight. */
+export const SEND_CONCURRENCY = 3
 
 /** Extra context for describeTransactionError. */
 export interface TransactionErrorContext {
@@ -145,6 +161,9 @@ export function describeTransactionError(
       err && typeof err === 'object' && 'InsufficientFundsForRent' in err
         ? Number((err as { InsufficientFundsForRent?: { account_index?: unknown } }).InsufficientFundsForRent?.account_index)
         : NaN
+    // Index 0 is the fee payer (the wallet). The closes only add to it, so it
+    // can only end below the minimum by paying the fee (checked before execution).
+    if (index === 0) return MESSAGES.feePayerRent
     if (isFeeWalletIndex(index, context)) return MESSAGES.feeWalletUnfunded
     return MESSAGES.rent
   }
@@ -183,19 +202,53 @@ function isFeeWalletIndex(index: number, context: TransactionErrorContext): bool
   return context.accountKeys[index] === context.feeWallet
 }
 
+/** The JSON-RPC error message web3.js got back from sendTransaction (SendTransactionError), if any. */
+function rpcErrorMessage(err: unknown): string | null {
+  const m = err && typeof err === 'object' ? (err as { transactionMessage?: unknown }).transactionMessage : undefined
+  return typeof m === 'string' ? m : null
+}
+
+/**
+ * What a failed first send means for the transaction:
+ * - 'rejected': the RPC answered with a JSON-RPC error about this tx (a failed
+ *   preflight, a bad signature, an unhealthy node). It was not forwarded.
+ * - 'already-processed': preflight saw it in the status cache: it landed (a
+ *   lost response to an earlier attempt, re-sent by RPC failover).
+ * - 'blockhash-not-found': the preflight node hasn't seen the blockhash —
+ *   either it expired, or that node lags the one that issued it.
+ * - 'uncertain': no JSON-RPC answer at all (network error, timeout, HTTP
+ *   error, a malformed answer). The tx may have been forwarded before the
+ *   answer was lost.
+ */
+export type SendErrorKind = 'rejected' | 'already-processed' | 'blockhash-not-found' | 'uncertain'
+
+export function classifySendError(err: unknown): SendErrorKind {
+  const rpc = rpcErrorMessage(err)
+  if (rpc === null) return 'uncertain'
+  if (/already been processed|AlreadyProcessed/i.test(rpc)) return 'already-processed'
+  if (/blockhash not found|BlockhashNotFound/i.test(rpc)) return 'blockhash-not-found'
+  return 'rejected'
+}
+
 /** Human-readable explanation for a sendRawTransaction failure (usually a failed preflight simulation). */
 export function describeSendError(
   err: unknown,
   programs: readonly string[] = [],
   context: TransactionErrorContext = {},
 ): string {
-  const msg = errMessage(err)
+  // web3.js wraps the RPC's message in developer text ("Simulation failed.
+  // Message: … Catch the `SendTransactionError` and call `getLogs()`…"); use the RPC's own words.
+  const msg = rpcErrorMessage(err) ?? errMessage(err)
   const rawLogs = err && typeof err === 'object' ? (err as { logs?: unknown }).logs : undefined
   const logs = Array.isArray(rawLogs) ? rawLogs.filter((l): l is string => typeof l === 'string') : []
   if (/blockhash not found/i.test(msg)) return MESSAGES.expired
   if (/insufficient funds for fee|no record of a prior credit/i.test(msg)) return MESSAGES.noSolForFee
   const rent = /account \((\d+)\) with insufficient funds for rent/i.exec(msg)
-  if (rent) return isFeeWalletIndex(Number(rent[1]), context) ? MESSAGES.feeWalletUnfunded : MESSAGES.rent
+  if (rent) {
+    const index = Number(rent[1])
+    if (index === 0) return MESSAGES.feePayerRent
+    return isFeeWalletIndex(index, context) ? MESSAGES.feeWalletUnfunded : MESSAGES.rent
+  }
   const custom = /Error processing Instruction (\d+): custom program error: 0x([0-9a-f]+)/i.exec(msg)
   if (custom) {
     const described = describeTransactionError(
@@ -211,13 +264,6 @@ export function describeSendError(
     if (log) return log
   }
   return `Could not send the transaction: ${msg}`
-}
-
-export function isUserRejection(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return typeof err === 'string' && /reject|declin|cancel/i.test(err)
-  const name = (err as { name?: unknown }).name
-  const message = (err as { message?: unknown }).message
-  return name === 'WalletSignTransactionError' || (typeof message === 'string' && /reject|declin|cancel/i.test(message))
 }
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
@@ -313,9 +359,21 @@ interface Tracked {
   bytes: Uint8Array
   lastValidBlockHeight: number
   deadline: number
-  lastSentAt: number
+  /** When the next rebroadcast is due. */
+  nextSendAt: number
+  /** Rebroadcasts so far (sets the backoff). */
+  resends: number
+  /** The last status poll found the signature (processed or better): the network has it, stop rebroadcasting. */
+  seen: boolean
   resolve: (outcome: ConfirmOutcome) => void
 }
+
+/** Wait before the rebroadcast after `resends` earlier ones: REBROADCAST_MS, doubling every REBROADCAST_BACKOFF_EVERY, capped. */
+export function rebroadcastDelay(resends: number): number {
+  return Math.min(REBROADCAST_MAX_MS, REBROADCAST_MS * 2 ** Math.floor(resends / REBROADCAST_BACKOFF_EVERY))
+}
+
+const isRateLimit = (err: unknown) => /\b429\b|too many requests/i.test(errMessage(err))
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -361,7 +419,9 @@ const landed = (s: { confirmationStatus?: string } | null | undefined) =>
  * websocket): one getSignatureStatuses for every pending signature each
  * CONFIRM_POLL_MS, one getBlockHeight('confirmed') for expiry, and a
  * rebroadcast of each transaction's own verified bytes (skipPreflight,
- * maxRetries 0) every REBROADCAST_MS while it is pending. An expired or
+ * maxRetries 0) while the network doesn't know it yet (no status at all):
+ * every REBROADCAST_MS at first, backing off to REBROADCAST_MAX_MS, at most
+ * MAX_REBROADCASTS_PER_TICK per round, paused after a 429. An expired or
  * timed-out signature gets one last getSignatureStatuses with
  * searchTransactionHistory before it is reported. Never sends anything but the
  * bytes passed to track().
@@ -369,6 +429,7 @@ const landed = (s: { confirmationStatus?: string } | null | undefined) =>
 export function createSignatureConfirmer(connection: StatusConnection, signal?: AbortSignal) {
   const pending = new Map<string, Tracked>()
   let running = false
+  let pausedUntil = 0
 
   const sleep = (ms: number) =>
     new Promise<void>((resolve) => {
@@ -418,6 +479,8 @@ export function createSignatureConfirmer(connection: StatusConnection, signal?: 
       )
       entries.forEach((entry, k) => {
         const st = values[k]
+        // Seen (even only 'processed'): resending can't help. Gone again (a dropped fork): resume.
+        entry.seen = st !== null && st !== undefined
         if (!landed(st)) return // unknown or only processed: keep waiting
         settle(entry, st?.err ? { status: 'failed', err: st.err } : { status: 'confirmed' })
       })
@@ -442,11 +505,17 @@ export function createSignatureConfirmer(connection: StatusConnection, signal?: 
 
     if (signal?.aborted) return
     const sendAt = Date.now()
-    for (const entry of pending.values()) {
-      if (sendAt - entry.lastSentAt < REBROADCAST_MS) continue
-      entry.lastSentAt = sendAt
+    if (sendAt < pausedUntil) return
+    const due = [...pending.values()]
+      .filter((e) => !e.seen && sendAt >= e.nextSendAt)
+      .sort((a, b) => a.nextSendAt - b.nextSendAt)
+      .slice(0, MAX_REBROADCASTS_PER_TICK)
+    for (const entry of due) {
+      entry.nextSendAt = sendAt + rebroadcastDelay(++entry.resends)
       // Same verified bytes; errors (already processed, dead blockhash…) are expected and ignored.
-      connection.sendRawTransaction(entry.bytes, REBROADCAST_OPTIONS).catch(() => {})
+      connection.sendRawTransaction(entry.bytes, REBROADCAST_OPTIONS).catch((err: unknown) => {
+        if (isRateLimit(err)) pausedUntil = Date.now() + REBROADCAST_RATE_LIMIT_PAUSE_MS
+      })
     }
   }
 
@@ -473,7 +542,16 @@ export function createSignatureConfirmer(connection: StatusConnection, signal?: 
       return new Promise<ConfirmOutcome>((resolve) => {
         const now = Date.now()
         pending.get(signature)?.resolve({ status: 'unknown' })
-        pending.set(signature, { signature, bytes, lastValidBlockHeight, deadline: now + MAX_CONFIRM_MS, lastSentAt: now, resolve })
+        pending.set(signature, {
+          signature,
+          bytes,
+          lastValidBlockHeight,
+          deadline: now + MAX_CONFIRM_MS,
+          nextSendAt: now + rebroadcastDelay(0),
+          resends: 0,
+          seen: false,
+          resolve,
+        })
         if (!running) void loop()
       })
     },
@@ -481,6 +559,29 @@ export function createSignatureConfirmer(connection: StatusConnection, signal?: 
 }
 
 const UNSENT: ReadonlySet<BatchStatus> = new Set(['pending', 'simulating', 'awaiting-signature'])
+
+/** Runs `work` over `items` with at most `limit` in flight, starting them in order. */
+async function forEachLimited<T>(items: readonly T[], limit: number, work: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  const lane = async () => {
+    while (next < items.length) await work(items[next++])
+  }
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, lane))
+}
+
+/** `promise`, or an AbortError as soon as `signal` aborts (the promise itself keeps running). */
+function unlessAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise
+  if (signal.aborted) return Promise.reject(abortError())
+  let onAbort = () => {}
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      onAbort = () => reject(abortError())
+      signal.addEventListener('abort', onAbort, { once: true })
+    }),
+  ]).finally(() => signal.removeEventListener('abort', onAbort))
+}
 
 /**
  * Builds, verifies (assertSafeCleanupTransaction), simulates, signs (one
@@ -601,8 +702,12 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
 
   // Wallet-level signing failure: stop, keep what's already in flight, rethrow.
   const onSignError = async (err: unknown): Promise<never> => {
+    // Stopped by the caller while the prompt was open: nothing was signed by us.
+    await abortIfNeeded()
     if (isUserRejection(err)) setMany(unsent(), { status: 'skipped' })
-    else setMany(unsent(), { status: 'failed', error: `The wallet could not sign: ${errMessage(err)}` })
+    else {
+      setMany(unsent(), { status: 'failed', error: describeWalletError(err) ?? `The wallet could not sign: ${errMessage(err)}` })
+    }
     await settle()
     throw err
   }
@@ -623,7 +728,9 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
       const sig = snap.tx.signatures[0]
       if (!sig || sig.length !== 64 || sig.every((b) => b === 0)) throw new Error('not signed')
       return snap
-    } catch {
+    } catch (err) {
+      // Which wallet feature did it (extra instruction, CU price, blockhash…) — for support.
+      console.warn(`[mopi] wallet-signed transaction for batch ${i} rejected: ${errMessage(err)}`)
       set(i, { status: 'failed', error: MESSAGES.walletModified })
       return null
     }
@@ -689,14 +796,37 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
     // The signature is read from the verified bytes, not taken from the RPC's
     // answer: a faulty endpoint can't make us watch (and report) another tx.
     const signature = base58(snap.tx.signatures[0])
+    const { lastValidBlockHeight } = lifetimes[i]
     try {
       await connection.sendRawTransaction(snap.bytes, SEND_OPTIONS)
     } catch (err) {
-      set(i, { status: 'failed', error: describeSendError(err, programs, ctx) })
-      return
+      const kind = classifySendError(err)
+      if (kind === 'rejected') {
+        // The RPC refused this exact tx (e.g. state changed since simulation): never resent.
+        set(i, { status: 'failed', error: describeSendError(err, programs, ctx) })
+        return
+      }
+      if (kind === 'blockhash-not-found') {
+        let height: number | null = null
+        try {
+          const h = await withTimeout(connection.getBlockHeight('confirmed'), CONFIRM_RPC_TIMEOUT_MS)
+          if (typeof h === 'number' && Number.isFinite(h)) height = h
+        } catch {
+          height = null
+        }
+        if (height !== null && height > lastValidBlockHeight) {
+          set(i, { status: 'failed', error: MESSAGES.expired })
+          return
+        }
+        // Still valid: the preflight node lags the one that issued the blockhash.
+        // Same verified bytes, no preflight (they passed simulation and every safety check).
+        connection.sendRawTransaction(snap.bytes, REBROADCAST_OPTIONS).catch(() => {})
+      }
+      // 'already-processed' (it landed), 'uncertain' (it may have been forwarded
+      // before the answer was lost) and a lagging preflight: watch the signature.
+      // Only these same bytes are ever resent; expiry + history decide the outcome.
     }
     set(i, { signature })
-    const { lastValidBlockHeight } = lifetimes[i]
     pendingConfirms.push(
       confirmer.track(signature, snap.bytes, lastValidBlockHeight).then((outcome) => {
         if (outcome.status === 'confirmed') set(i, { status: 'confirmed' })
@@ -712,7 +842,7 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
   if (wallet.signAllTransactions) {
     let signed: unknown
     try {
-      signed = await wallet.signAllTransactions(live.map((i) => current[i]))
+      signed = await unlessAborted(wallet.signAllTransactions(live.map((i) => current[i])), signal)
     } catch (err) {
       return onSignError(err)
     }
@@ -731,9 +861,7 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
     let ready = await dropExpired([...snaps.keys()])
     ready = await dropChangedNative(ready)
     await abortIfNeeded()
-    for (const i of ready) {
-      await send(i, snaps.get(i)!)
-    }
+    await forEachLimited(ready, SEND_CONCURRENCY, (i) => send(i, snaps.get(i)!))
   } else if (wallet.signTransaction) {
     for (const [k, i] of live.entries()) {
       await abortIfNeeded()
@@ -751,7 +879,7 @@ export async function executeCleanup(params: ExecuteCleanupParams): Promise<Batc
       }
       let signed: unknown
       try {
-        signed = await wallet.signTransaction(current[i])
+        signed = await unlessAborted(wallet.signTransaction(current[i]), signal)
       } catch (err) {
         return onSignError(err)
       }

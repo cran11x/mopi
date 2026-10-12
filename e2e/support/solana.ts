@@ -7,6 +7,13 @@ import { Keypair, PublicKey } from '@solana/web3.js'
 export const RPC_URL = 'https://api.mainnet-beta.solana.com'
 export const RPC_ROUTE = /^https:\/\/api\.mainnet-beta\.solana\.com\/?(\?.*)?$/
 export const WS_ROUTE = /^wss:\/\/api\.mainnet-beta\.solana\.com\/?(\?.*)?$/
+/**
+ * The default mainnet fallback the app fails over to (src/config.ts DEFAULT_MAINNET_RPC_FALLBACK)
+ * while VITE_SOLANA_RPC_URL is unset, as it is in the e2e build. Mocked alongside RPC_ROUTE so a
+ * failover never reaches the real network (CI has internet access).
+ */
+export const FALLBACK_RPC_URL = 'https://solana-rpc.publicnode.com'
+export const FALLBACK_RPC_ROUTE = /^https:\/\/solana-rpc\.publicnode\.com\/?(\?.*)?$/
 
 export const SPL_TOKEN = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 export const TOKEN_2022 = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'

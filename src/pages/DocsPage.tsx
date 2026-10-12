@@ -100,12 +100,28 @@ const ENV_VARS: Array<{ name: string; def: string; body: ReactNode }> = [
     body: 'Devnet RPC endpoint, used when the network switch is on Devnet.',
   },
   {
+    name: 'VITE_SOLANA_RPC_FALLBACKS',
+    def: 'publicnode while VITE_SOLANA_RPC_URL is empty, else none',
+    body: (
+      <>
+        Comma-separated https mainnet endpoints tried, in order, when the primary fails (network error, 15 s timeout,
+        HTTP 401/402/403/404/408/410/429/5xx). <code>none</code> disables. Same cluster only.
+      </>
+    ),
+  },
+  {
+    name: 'VITE_SOLANA_DEVNET_RPC_FALLBACKS',
+    def: 'none',
+    body: 'The same, for devnet.',
+  },
+  {
     name: 'VITE_FEE_WALLET',
     def: 'empty',
     body: (
       <>
         Service fee recipient. Must be an <strong>existing, funded system account</strong> (a transfer to an unfunded
-        address below rent-exemption fails). Empty = no service fee and no transfer instruction.
+        address below rent-exemption fails, so mopi blocks approval until it is funded). Empty = no service fee and no
+        transfer instruction.
       </>
     ),
   },
@@ -122,12 +138,22 @@ const ENV_VARS: Array<{ name: string; def: string; body: ReactNode }> = [
   {
     name: 'VITE_MOPI_MINT',
     def: 'empty',
-    body: 'The $MOPI mint. While empty, holder perks show as “planned” and no holder check runs.',
+    body: 'The $MOPI mint. While empty, holder perks show as “planned”, no holder check runs and no contract address is shown. Once set, the CA appears with copy and Solscan buttons.',
   },
   {
     name: 'VITE_MOPI_HOLDER_MIN',
     def: '100000',
     body: 'Whole $MOPI tokens the connected wallet needs for holder access.',
+  },
+  {
+    name: 'VITE_X_URL',
+    def: 'empty',
+    body: 'Official X profile (https only). Empty hides the link.',
+  },
+  {
+    name: 'VITE_TELEGRAM_URL',
+    def: 'empty',
+    body: 'Official Telegram link (https only). Empty hides the link.',
   },
   {
     name: 'VITE_SITE_URL',
@@ -362,7 +388,7 @@ npm run build                # outputs dist/`}
               <Icon name="alert" size={18} />
               <span>
                 The public Solana RPC endpoints are heavily rate limited. For real use, point{' '}
-                <code>VITE_SOLANA_RPC_URL</code> at your own RPC provider.
+                <code>VITE_SOLANA_RPC_URL</code> at your own RPC provider (HTTPS with CORS; no websocket needed).
               </span>
             </p>
           </section>

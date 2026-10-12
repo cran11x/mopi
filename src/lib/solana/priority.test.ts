@@ -114,3 +114,32 @@ describe('estimatePriorityFee', () => {
     expect(fee).toBeGreaterThan(bounds.floor)
   })
 })
+
+describe('a malicious getRecentPrioritizationFees cannot exceed the cap', () => {
+  const bounds = { floor: CONFIG.priorityFeeMicroLamports, cap: CONFIG.maxPriorityFeeMicroLamports }
+
+  it('clamps absurd / hostile samples to [floor, cap]', () => {
+    const hostile = [
+      { slot: 1, prioritizationFee: 1e18 },
+      { slot: 2, prioritizationFee: Number.MAX_VALUE },
+      { slot: 3, prioritizationFee: Infinity },
+      { slot: 4, prioritizationFee: NaN },
+      { slot: 5, prioritizationFee: -5 },
+      { slot: 6, prioritizationFee: '99999999999' },
+      { slot: 7, prioritizationFee: 2 ** 64 },
+    ]
+    expect(pickPriorityFee(hostile, bounds)).toBe(CONFIG.maxPriorityFeeMicroLamports)
+    expect(pickPriorityFee([{ prioritizationFee: -1 }, null, 7, 'x'], bounds)).toBe(CONFIG.priorityFeeMicroLamports)
+    expect(pickPriorityFee({ length: 3, 0: { prioritizationFee: 1e15 } }, bounds)).toBe(CONFIG.priorityFeeMicroLamports)
+  })
+
+  it('estimatePriorityFee: hostile RPC answer → cap; result is an integer', async () => {
+    const conn = {
+      getRecentPrioritizationFees: vi.fn(async () => Array.from({ length: 150 }, (_, i) => ({ slot: i, prioritizationFee: 1e17 + 0.5 }))),
+    }
+    const price = await estimatePriorityFee(conn, [Keypair.generate().publicKey], bounds)
+    expect(price).toBe(CONFIG.maxPriorityFeeMicroLamports)
+    expect(Number.isInteger(price)).toBe(true)
+  })
+})
+

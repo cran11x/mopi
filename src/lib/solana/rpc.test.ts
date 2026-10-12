@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { Connection, Keypair } from '@solana/web3.js'
 import { describe, expect, it, vi } from 'vitest'
-import { readRpcFallbacks, DEFAULT_MAINNET_RPC_FALLBACK } from '../../config'
-import { PREFER_HEALTHY_MS, createFailoverFetch, isFailoverStatus } from './rpc'
+import { readRpcFallbacks, defaultMainnetFallbacks, DEFAULT_MAINNET_RPC_FALLBACK } from '../../config'
+import { PREFER_HEALTHY_MS, RPC_ATTEMPT_TIMEOUT_MS, RpcTimeoutError, createFailoverFetch, isFailoverStatus } from './rpc'
 
 const A = 'https://primary.example'
 const B = 'https://fallback-one.example'
@@ -50,9 +50,10 @@ function setup(plan: Record<string, Answer[]>, endpoints = [A, B, C]) {
 }
 
 describe('isFailoverStatus', () => {
-  it('fails over on 403, 429 and 5xx only', () => {
-    for (const s of [403, 429, 500, 502, 503, 504]) expect(isFailoverStatus(s)).toBe(true)
-    for (const s of [200, 400, 401, 404, 413]) expect(isFailoverStatus(s)).toBe(false)
+  it('fails over on endpoint-level answers (bad key, no credits, wrong path, timeout, rate limit, 5xx) only', () => {
+    for (const s of [401, 402, 403, 404, 408, 410, 429, 500, 502, 503, 504, 524]) expect(isFailoverStatus(s)).toBe(true)
+    // 200 carries JSON-RPC errors; 400 / 413 are about the request itself.
+    for (const s of [200, 400, 405, 413, 415]) expect(isFailoverStatus(s)).toBe(false)
   })
 })
 
@@ -70,7 +71,15 @@ describe('createFailoverFetch', () => {
     expect(res.status).toBe(200)
     expect(t.calls.map((c) => c.url)).toEqual([A, B])
     expect(t.calls[1].body).toBe(t.init.body)
-    expect(t.calls[1].init).toBe(t.calls[0].init) // same init object, untouched
+    // Same request (method, body); only the per-attempt timeout signal is added.
+    expect(t.calls[1].init).toMatchObject(t.init)
+    expect(t.calls[1].init?.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('a 401 (bad or revoked API key) on the primary fails over', async () => {
+    const t = setup({ [A]: [401], [B]: [200] })
+    expect((await t.call()).status).toBe(200)
+    expect(t.calls.map((c) => c.url)).toEqual([A, B])
   })
 
   it('HTTP 5xx and 403 fail over immediately; a 429 first gets the short backoff', async () => {
@@ -135,6 +144,70 @@ describe('createFailoverFetch', () => {
     expect(t.calls).toHaveLength(1)
   })
 
+  it('an endpoint that never answers times out and the same request goes to the next endpoint', async () => {
+    vi.useFakeTimers()
+    try {
+      const signals: AbortSignal[] = []
+      const fn = vi.fn(async (input: unknown, init?: RequestInit) => {
+        if (String(input) === A) {
+          signals.push(init!.signal!)
+          return new Promise<Response>(() => {}) // TCP open, no answer
+        }
+        return new Response('{"ok":1}', { status: 200 })
+      })
+      const f = createFailoverFetch({ endpoints: [A, B], fetch: fn as unknown as typeof fetch, attemptTimeoutMs: 1_000 })
+      const pending = f(A, { method: 'POST', body: '{}' } as never)
+      await vi.advanceTimersByTimeAsync(999)
+      expect(fn).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1)
+      const res = await pending
+      expect(res.status).toBe(200)
+      expect(fn.mock.calls.map((c) => String(c[0]))).toEqual([A, B])
+      expect(signals[0].aborted).toBe(true) // the hung fetch is cancelled, not left dangling
+      expect(f.activeEndpoint()).toBe(B)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a stalled body counts too; with no endpoint left the timeout is thrown (an Error, so web3.js rejects)', async () => {
+    vi.useFakeTimers()
+    try {
+      const stalledBody = () =>
+        new Response(new ReadableStream({ start() {} }), { status: 200 }) // headers arrive, body never ends
+      const fn = vi.fn(async () => stalledBody())
+      const f = createFailoverFetch({ endpoints: [A], fetch: fn as unknown as typeof fetch, attemptTimeoutMs: 500 })
+      const pending = f(A, { method: 'POST', body: '{}' } as never)
+      const settled = expect(pending).rejects.toBeInstanceOf(RpcTimeoutError)
+      await vi.advanceTimersByTimeAsync(500)
+      await settled
+      await expect(pending).rejects.toBeInstanceOf(Error)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a stalled sendTransaction through a real Connection fails over instead of hanging', async () => {
+    vi.useFakeTimers()
+    try {
+      const fn = async (input: unknown, init?: RequestInit) => {
+        if (String(input) === A) return new Promise<Response>(() => {})
+        const req = JSON.parse(String(init?.body)) as { id: string }
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { context: { slot: 1 }, value: 7 } }), { status: 200 })
+      }
+      const connection = new Connection(A, {
+        commitment: 'confirmed',
+        disableRetryOnRateLimit: true,
+        fetch: createFailoverFetch({ endpoints: [A, B], fetch: fn as unknown as typeof fetch }) as never,
+      })
+      const balance = connection.getBalance(Keypair.generate().publicKey)
+      await vi.advanceTimersByTimeAsync(RPC_ATTEMPT_TIMEOUT_MS)
+      expect(await balance).toBe(7)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('an aborted request is not retried elsewhere', async () => {
     const ac = new AbortController()
     const { fn } = fakeFetch({})
@@ -191,3 +264,47 @@ describe('readRpcFallbacks', () => {
     warn.mockRestore()
   })
 })
+
+describe('defaultMainnetFallbacks', () => {
+  it('the public fallback is a default only for the public primary, never behind an operator-chosen RPC', () => {
+    expect(defaultMainnetFallbacks(undefined)).toEqual([DEFAULT_MAINNET_RPC_FALLBACK])
+    expect(defaultMainnetFallbacks('  ')).toEqual([DEFAULT_MAINNET_RPC_FALLBACK])
+    expect(defaultMainnetFallbacks('https://mainnet.helius-rpc.com/?api-key=x')).toEqual([])
+    // An explicit list still applies with a custom primary.
+    expect(readRpcFallbacks(B, defaultMainnetFallbacks(A), A)).toEqual([B])
+    expect(readRpcFallbacks(undefined, defaultMainnetFallbacks(A), A)).toEqual([])
+  })
+})
+
+describe('RPC failover: bodies only go to operator-configured endpoints', () => {
+  it('re-sends the identical body only to listed endpoints; unlisted URLs are passed through untouched', async () => {
+    const calls: Array<{ url: string; body: unknown }> = []
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), body: init?.body })
+      return new Response('down', { status: 503 })
+    })
+    const f = createFailoverFetch({ endpoints: [A, B], fetch: fetchImpl as never, sleep: async () => {} })
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'sendTransaction', params: ['AQ…'] })
+    const res = await f(A, { method: 'POST', body })
+    expect(res.status).toBe(503)
+    expect(new Set(calls.map((c) => c.url))).toEqual(new Set([A, B]))
+    expect(calls.every((c) => c.body === body)).toBe(true)
+
+    calls.length = 0
+    await f('https://elsewhere.example/', { method: 'POST', body })
+    expect(calls.map((c) => c.url)).toEqual(['https://elsewhere.example/'])
+  })
+
+  it('readRpcFallbacks drops non-https / junk entries and the primary', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const out = readRpcFallbacks(
+      'http://plain.example, javascript:alert(1), wss://ws.example, //proto-rel.example, https://ok.example/, https://primary.example/, not a url',
+      [],
+      'https://primary.example',
+    )
+    expect(out).toEqual(['https://ok.example/'])
+    expect(readRpcFallbacks('none', ['https://x.example'], A)).toEqual([])
+    warn.mockRestore()
+  })
+})
+

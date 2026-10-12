@@ -43,8 +43,10 @@ vi.mock('../lib/solana/execute', () => ({ executeCleanup: (...args: unknown[]) =
 
 import {
   FEES_CHANGED_NOTICE,
+  FEE_WALLET_BALANCE_TIMEOUT_MS,
   PRIORITY_FEE_MAX_AGE_MS,
   RENT_EXEMPT_MINIMUM_LAMPORTS,
+  STOPPED_MESSAGE,
   CleanerProvider,
   useCleaner,
 } from './cleaner'
@@ -412,5 +414,75 @@ describe('fee wallet health', () => {
     expect(getBalance).toHaveBeenCalled()
     expect(h.execute).not.toHaveBeenCalled()
     expect(result.current.executeBlocker).toBe('fee-wallet-unfunded')
+  })
+})
+
+describe('a stalled RPC never traps the review or the run', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('a fee-wallet balance read that never answers: "checking fees" ends and approval still works', async () => {
+    h.feeWallet = Keypair.generate().publicKey.toBase58()
+    h.rpc = {
+      getRecentPrioritizationFees: async () => [],
+      getBalance: () => new Promise<number>(() => {}), // overloaded node: TCP open, no answer
+    }
+    const { result } = await realReady()
+    vi.useFakeTimers()
+    act(() => result.current.openReview())
+    expect(result.current.checkingFees).toBe(true)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FEE_WALLET_BALANCE_TIMEOUT_MS)
+    })
+    expect(result.current.checkingFees).toBe(false)
+    // Unreadable is not "unfunded": nothing is blocked; simulation would explain a real problem.
+    expect(result.current.executeBlocker).toBeNull()
+    // Later (stale balance → re-read, which hangs again): the approve still goes through, bounded.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+      const started = result.current.startCleanup()
+      await vi.advanceTimersByTimeAsync(2 * FEE_WALLET_BALANCE_TIMEOUT_MS)
+      await started
+    })
+    expect(h.execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('"Stop waiting" aborts the run: the dialog can be left, and what is known stays on screen', async () => {
+    h.rpc = { getRecentPrioritizationFees: async () => [] }
+    const { result } = await realReady()
+    let signal: AbortSignal | undefined
+    h.execute = vi.fn(
+      (params: { signal?: AbortSignal; onProgress: (p: unknown[]) => void }) =>
+        new Promise((_, reject) => {
+          signal = params.signal
+          params.onProgress([{ index: 0, status: 'awaiting-signature', accountCount: 2, reclaimLamports: 1 }])
+          // A wallet prompt that never returns; only the abort ends it.
+          params.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')))
+        }),
+    )
+    let run: Promise<void> = Promise.resolve()
+    await act(async () => {
+      run = result.current.startCleanup()
+      await new Promise((r) => setTimeout(r, 20))
+    })
+    expect(result.current.cleanup.phase).toBe('executing')
+    expect(signal).toBeInstanceOf(AbortSignal)
+    await act(async () => {
+      result.current.stopCleanup()
+      await run
+    })
+    expect(signal!.aborted).toBe(true)
+    expect(result.current.cleanup.phase).toBe('error')
+    expect(result.current.cleanup.error).toBe(STOPPED_MESSAGE)
+    expect(result.current.cleanup.progress).toHaveLength(1)
+    // A new run can start (no stuck executing guard).
+    h.execute = vi.fn(async () => [])
+    act(() => result.current.openReview())
+    await waitFor(() => expect(result.current.checkingFees).toBe(false))
+    await act(async () => {
+      await result.current.startCleanup()
+    })
+    expect(h.execute).toHaveBeenCalledTimes(1)
   })
 })

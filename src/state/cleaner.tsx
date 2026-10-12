@@ -15,6 +15,7 @@ import { createDemoScan, demoFeeConfig, DEMO_OWNER, isDemoAddress } from '../lib
 import { buildQuote, defaultFeeConfig } from '../lib/solana/fees'
 import { estimatePriorityFee } from '../lib/solana/priority'
 import { scanWallet } from '../lib/solana/scan'
+import { describeWalletError } from '../lib/solana/walletErrors'
 // execute.ts (transaction building, safety checks, sending) is loaded on the
 // first real cleanup, so it stays out of the first-paint bundle.
 import { getHolderStatus } from '../lib/solana/holder'
@@ -52,6 +53,15 @@ export const PRIORITY_FEE_MAX_AGE_MS = 30_000
 
 /** A fee wallet balance older than this is re-read before a real cleanup starts. */
 export const FEE_WALLET_BALANCE_MAX_AGE_MS = 60_000
+
+/** A fee wallet balance read that takes longer than this counts as unreadable (not blocking; simulation still explains). */
+export const FEE_WALLET_BALANCE_TIMEOUT_MS = 5_000
+
+/** "Stop waiting" is offered once a real run has been going this long (a wallet prompt or confirmation can hang). */
+export const STOP_WAITING_AFTER_MS = 30_000
+
+export const STOPPED_MESSAGE =
+  'Stopped waiting. A transaction that was already sent may still land — check its link, then rescan.'
 
 /**
  * A pre-start estimate up to this factor above the price on screen still runs
@@ -122,6 +132,8 @@ export interface CleanerApi {
   openReview: () => void
   closeReview: () => void
   startCleanup: () => Promise<void>
+  /** Stops waiting for a running real cleanup (wallet prompt or confirmations); nothing new is signed or sent. */
+  stopCleanup: () => void
   resetCleanup: () => void
 }
 
@@ -150,10 +162,12 @@ function parseAddress(input: string): PublicKey | null {
 }
 
 function describeError(err: unknown): string {
+  const wallet = describeWalletError(err)
+  if (wallet) return wallet
   if (err instanceof Error) {
     const msg = err.message || err.name
-    if (/User rejected|rejected the request|declined/i.test(msg)) return 'You declined the request in your wallet.'
     if (/429|Too Many Requests|rate/i.test(msg)) return 'The RPC endpoint is rate limiting requests. Try again in a moment.'
+    if (/timed out/i.test(msg)) return 'The Solana RPC didn’t answer in time. Try again — public endpoints are often busy.'
     if (/Failed to fetch|NetworkError|fetch failed|Load failed/i.test(msg))
       return 'Couldn’t reach the Solana RPC. Check your connection and try again — public endpoints are often busy.'
     return msg
@@ -213,6 +227,9 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
   feeWalletBalanceRef.current = feeWalletBalance
   /** Bumped whenever the review is opened, closed or reset: a pending start must not outlive its review. */
   const reviewSeq = useRef(0)
+  /** Aborts the running real cleanup ("Stop waiting", or unmount). */
+  const runAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => runAbort.current?.abort(), [])
   const priorityInflight = useRef<{ key: string; promise: Promise<number> } | null>(null)
   const feeWalletInflight = useRef<{ key: string; promise: Promise<number | null> } | null>(null)
 
@@ -426,11 +443,21 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
     if (inflight && inflight.key === key) return inflight.promise
     const promise: Promise<number | null> = (async () => {
       let lamports: number | null = null
+      let timer: ReturnType<typeof setTimeout> | undefined
       try {
-        const value: unknown = await connection.getBalance(new PublicKey(feeWallet), 'confirmed')
+        // Bounded like the priority estimate: a stalled RPC must not keep the
+        // review "checking fees" (or a pending approve waiting) forever.
+        const value: unknown = await Promise.race([
+          connection.getBalance(new PublicKey(feeWallet), 'confirmed'),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('fee wallet balance timed out')), FEE_WALLET_BALANCE_TIMEOUT_MS)
+          }),
+        ])
         lamports = typeof value === 'number' && Number.isFinite(value) ? value : null
       } catch {
         lamports = null
+      } finally {
+        clearTimeout(timer)
       }
       setFeeWalletBalance({ key, lamports, at: Date.now() })
       return lamports
@@ -585,7 +612,25 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
       return
     }
     let lastProgress: BatchProgress[] = []
+    const controller = new AbortController()
+    runAbort.current = controller
     setCleanup({ phase: 'executing', progress: [], error: null, result: null, isDemoRun: false })
+    const summarize = (progress: BatchProgress[]) => {
+      const confirmed = progress.filter((p) => p.status === 'confirmed')
+      const returnedLamports = confirmed.reduce((sum, p) => {
+        const batch = quoteAtStart.batches[p.index]
+        return batch ? sum + batch.reclaimLamports - batch.serviceFeeLamports - batch.networkFeeLamports : sum
+      }, 0)
+      return {
+        confirmed,
+        result: {
+          confirmedBatches: confirmed.length,
+          failedBatches: progress.length - confirmed.length,
+          returnedLamports: Math.max(0, returnedLamports),
+          signatures: confirmed.map((p) => p.signature).filter((s): s is string => Boolean(s)),
+        },
+      }
+    }
     try {
       const { executeCleanup } = await import('../lib/solana/execute')
       const progress = await executeCleanup({
@@ -601,35 +646,40 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
           lastProgress = p
           setCleanup((c) => ({ ...c, progress: p }))
         },
+        signal: controller.signal,
       })
-      const confirmed = progress.filter((p) => p.status === 'confirmed')
-      const returnedLamports = confirmed.reduce((sum, p) => {
-        const batch = quoteAtStart.batches[p.index]
-        return batch ? sum + batch.reclaimLamports - batch.serviceFeeLamports - batch.networkFeeLamports : sum
-      }, 0)
+      const { confirmed, result } = summarize(progress)
       setCleanup({
         phase: confirmed.length > 0 ? 'done' : 'error',
         progress,
         error: confirmed.length > 0 ? null : progress.find((p) => p.error)?.error ?? 'No batch could be confirmed.',
         isDemoRun: false,
-        result: {
-          confirmedBatches: confirmed.length,
-          failedBatches: progress.length - confirmed.length,
-          returnedLamports: Math.max(0, returnedLamports),
-          signatures: confirmed.map((p) => p.signature).filter((s): s is string => Boolean(s)),
-        },
+        result,
       })
       executingRef.current = false
       // Refresh balances in the background; keep the result visible.
       if (confirmed.length > 0) refreshAfterCleanup(owner)
     } catch (err) {
       executingRef.current = false
-      setCleanup((c) => ({ ...c, phase: 'error', error: describeError(err) }))
+      if (controller.signal.aborted) {
+        // "Stop waiting": show what is known; unfinished batches say "may still land".
+        const { confirmed, result } = summarize(lastProgress)
+        setCleanup({
+          phase: confirmed.length > 0 ? 'done' : 'error',
+          progress: lastProgress,
+          error: confirmed.length > 0 ? null : STOPPED_MESSAGE,
+          isDemoRun: false,
+          result,
+        })
+      } else {
+        setCleanup((c) => ({ ...c, phase: 'error', error: describeError(err) }))
+      }
       // e.g. batch 1 confirmed, then the second wallet prompt was declined:
       // the closed accounts must not stay listed (and selected) as eligible.
       if (lastProgress.some((p) => p.status === 'confirmed')) refreshAfterCleanup(owner)
     } finally {
       executingRef.current = false
+      if (runAbort.current === controller) runAbort.current = null
     }
   }, [
     cleanup.phase,
@@ -645,6 +695,10 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
     trackCheck,
     wallet,
   ])
+
+  const stopCleanup = useCallback(() => {
+    runAbort.current?.abort()
+  }, [])
 
   const checkingFees = checks > 0
 
@@ -672,6 +726,7 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
     openReview,
     closeReview,
     startCleanup,
+    stopCleanup,
     resetCleanup,
     }),
     [
@@ -697,6 +752,7 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
       openReview,
       closeReview,
       startCleanup,
+      stopCleanup,
       resetCleanup,
     ],
   )

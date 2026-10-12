@@ -51,3 +51,30 @@ describe('tokenExplorerUrl', () => {
     )
   })
 })
+
+describe('CA / social links (hostile values)', () => {
+  it('only absolute https URLs survive', () => {
+    const bad = [
+      'javascript:alert(1)',
+      'JAVASCRIPT:alert(1)',
+      ' javascript:alert(1)',
+      'java\tscript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'http://x.com/mopi',
+      '//x.com/mopi',
+      '/x',
+      'https:javascript:alert(1)',
+      'https://user:pw@x.com/',
+      'vbscript:msgbox(1)',
+      'https://x.com/a b',
+    ]
+    for (const v of bad) expect(readHttpsUrl(v), v).toBeNull()
+    expect(readHttpsUrl('https://x.com/mopi')).toBe('https://x.com/mopi')
+    expect(readHttpsUrl('HTTPS://t.me/mopi')).toBe('https://t.me/mopi')
+  })
+
+  it('the Solscan link is URL-encoded, so a junk mint cannot escape the path', () => {
+    expect(tokenExplorerUrl('../../evil?x=1')).toBe('https://solscan.io/token/..%2F..%2Fevil%3Fx%3D1')
+  })
+})
+

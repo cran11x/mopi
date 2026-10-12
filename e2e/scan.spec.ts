@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 import { RpcError, context, mockRpc } from './support/rpc'
 import {
+  FALLBACK_RPC_URL,
+  RPC_URL,
   SPL_RENT,
   SPL_TOKEN,
   T22_FEE_RENT,
@@ -11,6 +13,9 @@ import {
 } from './support/solana'
 
 // A real (read-only) scan against a mocked mainnet JSON-RPC.
+
+/** The default build has no fee wallet; a build with VITE_FEE_WALLET shows a service fee amount instead of "none". */
+const FEE_WALLET = process.env.VITE_FEE_WALLET?.trim() || null
 
 const OWNER = address(41)
 const acct = (n: number) => address(100 + n)
@@ -122,7 +127,9 @@ test('scans a real-looking wallet: counts, tabs, reasons, no demo chip', async (
   // Preview: 3 × 2,039,280 + 2,074,080 = 8,191,920 lamports; no fee wallet → service fee "none".
   const preview = page.getByRole('region', { name: /cleanup preview/i })
   await expect(preview.locator('.preview__row').filter({ hasText: 'Account SOL detected' })).toContainText('0.0082')
-  await expect(preview.locator('.preview__row').filter({ hasText: 'Service fee' })).toContainText('none')
+  await expect(preview.locator('.preview__row').filter({ hasText: 'Service fee' })).toContainText(
+    FEE_WALLET ? /−0\.\d{4}\s*SOL/ : 'none',
+  )
   await expect(preview.getByText('Final amounts appear in your wallet before you approve.')).toBeVisible()
 
   // Skipped: has tokens, frozen, withheld transfer fees.
@@ -169,7 +176,8 @@ test('an invalid address shows an inline error and makes no RPC call', async ({ 
 })
 
 test('an RPC 429 shows a friendly rate-limit error', async ({ page }) => {
-  // The app retries a 429 twice (0.6 s, then 1.2 s) before showing the error.
+  // The app retries a 429 twice (0.6 s, then 1.2 s), then fails over to the default fallback
+  // endpoint (mocked here too, also rate limited) before showing the error.
   test.setTimeout(30_000)
   const rpc = await mockRpc(page, { handlers: {}, httpStatus: 429 })
   await page.goto('/')
@@ -180,4 +188,8 @@ test('an RPC 429 shows a friendly rate-limit error', async ({ page }) => {
   await expect(alert).toHaveText('The RPC endpoint is rate limiting requests. Try again in a moment.', { timeout: 10_000 })
   await expect(page.getByRole('search', { name: 'Scan a wallet' }).getByRole('button', { name: /Scan wallet/ })).toBeEnabled()
   expect(rpc.calls.length).toBe(0) // answered at the HTTP layer, before JSON-RPC
+  // Both endpoints were tried, primary first; nothing reached the real network.
+  expect(rpc.posts[0]).toBe(RPC_URL)
+  expect(rpc.posts).toContain(FALLBACK_RPC_URL)
+  expect(rpc.posts.every((origin) => origin === RPC_URL || origin === FALLBACK_RPC_URL)).toBe(true)
 })

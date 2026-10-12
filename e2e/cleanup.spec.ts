@@ -33,8 +33,17 @@ const BLOCK_HEIGHT = 280_000_000
 const LAST_VALID_BLOCK_HEIGHT = BLOCK_HEIGHT + 150
 const SHORT = `${WALLET_B58.slice(0, 4)}...${WALLET_B58.slice(-4)}`
 
-async function setup(page: Page, opts: { rejectSigning?: boolean } = {}) {
-  await installFakeWallet(page, WALLET, opts)
+interface SetupOptions {
+  rejectSigning?: boolean
+  /**
+   * The mocked RPC reports the signature as unknown (null status) until it has received this many
+   * sendTransaction calls, i.e. the first send was "dropped" and the app has to rebroadcast.
+   */
+  unseenUntilSends?: number
+}
+
+async function setup(page: Page, opts: SetupOptions = {}) {
+  await installFakeWallet(page, WALLET, { rejectSigning: opts.rejectSigning })
   const closed = new Set<string>()
   const sent: string[] = []
   const simulated: string[] = []
@@ -72,13 +81,11 @@ async function setup(page: Page, opts: { rejectSigning?: boolean } = {}) {
       },
       getSignatureStatuses: (params) => ({
         context: context(),
-        value: (params[0] as string[]).map(() => ({
-          slot: 300_000_005,
-          confirmations: null,
-          err: null,
-          status: { Ok: null },
-          confirmationStatus: 'confirmed',
-        })),
+        value: (params[0] as string[]).map((signature) =>
+          sent.filter((b64) => signatureOf(b64) === signature).length < (opts.unseenUntilSends ?? 1)
+            ? null
+            : { slot: 300_000_005, confirmations: null, err: null, status: { Ok: null }, confirmationStatus: 'confirmed' },
+        ),
       }),
       getSignatureStatus: () => ({ context: context(), value: null }),
       getMultipleAccounts: (params) => ({ context: context(), value: (params[0] as string[]).map(() => null) }),
@@ -88,6 +95,10 @@ async function setup(page: Page, opts: { rejectSigning?: boolean } = {}) {
   const ws = await mockRpcWebSocket(page)
 
   return { rpc, ws, sent, simulated }
+}
+
+function signatureOf(b64: string): string {
+  return base58(VersionedTransaction.deserialize(Buffer.from(b64, 'base64')).signatures[0])
 }
 
 /** Connects through mopi's wallet picker and waits for the automatic scan of the connected wallet. */
@@ -155,8 +166,9 @@ test('connect a Wallet Standard wallet → auto-scan → review → approve → 
   const href = await done.getByRole('link', { name: /Transaction 1:/ }).getAttribute('href')
   const signature = base58(VersionedTransaction.deserialize(Buffer.from(sent[0], 'base64')).signatures[0])
   expect(href).toBe(`https://solscan.io/tx/${signature}`)
-  // Confirmation went through the websocket subscription.
-  expect(ws.signatureSubscriptions).toContain(signature)
+  // Confirmation is HTTP polling of the signature (works with any RPC); no websocket subscription.
+  expect(rpc.callsTo('getSignatureStatuses').some((c) => (c.params[0] as string[]).includes(signature))).toBe(true)
+  expect(ws.signatureSubscriptions).toEqual([])
 
   const wallet = await walletState(page)
   expect(wallet.signCalls).toBe(1)
@@ -175,6 +187,12 @@ test('connect a Wallet Standard wallet → auto-scan → review → approve → 
   const simTx = VersionedTransaction.deserialize(Buffer.from(simulated[0], 'base64'))
   const sentTx = VersionedTransaction.deserialize(Buffer.from(sent[0], 'base64'))
   expect(Buffer.from(sentTx.message.serialize()).equals(Buffer.from(simTx.message.serialize()))).toBe(true)
+  // Every sendTransaction payload the RPC received carries exactly these verified, signed bytes.
+  const sendCalls = rpc.callsTo('sendTransaction')
+  expect(sendCalls.length).toBeGreaterThanOrEqual(1)
+  for (const call of sendCalls) expect(call.params[0]).toBe(sent[0])
+  // The first send keeps preflight.
+  expect(sendCalls[0].params[1]).not.toMatchObject({ skipPreflight: true })
 
   const closedAccounts: string[] = []
   for (const b64 of sent) {
@@ -245,4 +263,46 @@ test('declining in the wallet sends nothing and explains what happened', async (
   await expect(page.getByRole('dialog')).toHaveCount(0)
   // The accounts are untouched and still selected.
   await expect(page.getByRole('tab', { name: 'Eligible (3)' })).toBeVisible()
+})
+
+test('a dropped send is rebroadcast with the identical verified bytes until the RPC confirms it', async ({ page }) => {
+  test.setTimeout(45_000)
+  const errors = collectErrors(page)
+  // The RPC "loses" the first send: the signature stays unknown until a second copy arrives.
+  const { rpc, ws, sent, simulated } = await setup(page, { unseenUntilSends: 2 })
+  await connectAndScan(page)
+  const dialog = await openReview(page)
+  await dialog.getByRole('button', { name: 'Approve in wallet' }).click()
+
+  const done = page.getByRole('dialog', { name: 'Cleanup complete' })
+  await expect(done).toBeVisible({ timeout: 30_000 })
+  await expect(done.getByText('1 of 1 transaction confirmed.')).toBeVisible()
+
+  // One signature from the wallet, one simulation, at least two sends of the very same bytes.
+  expect((await walletState(page)).signCalls).toBe(1)
+  expect(simulated).toHaveLength(1)
+  expect(sent.length).toBeGreaterThanOrEqual(2)
+  expect(new Set(sent).size, 'every send carries identical bytes').toBe(1)
+  const simTx = VersionedTransaction.deserialize(Buffer.from(simulated[0], 'base64'))
+  const sentTx = VersionedTransaction.deserialize(Buffer.from(sent[0], 'base64'))
+  expect(Buffer.from(sentTx.message.serialize()).equals(Buffer.from(simTx.message.serialize()))).toBe(true)
+
+  const sendCalls = rpc.callsTo('sendTransaction')
+  // First send: with preflight. Rebroadcasts: no preflight and no RPC-side retries (mopi re-sends itself).
+  expect(sendCalls[0].params[1]).not.toMatchObject({ skipPreflight: true })
+  for (const call of sendCalls.slice(1)) expect(call.params[1]).toMatchObject({ encoding: 'base64', skipPreflight: true, maxRetries: 0 })
+
+  // Confirmation came from HTTP polling of the signature computed from the signed bytes.
+  const signature = signatureOf(sent[0])
+  const href = await done.getByRole('link', { name: /Transaction 1:/ }).getAttribute('href')
+  expect(href).toBe(`https://solscan.io/tx/${signature}`)
+  const polls = rpc.callsTo('getSignatureStatuses').filter((c) => (c.params[0] as string[]).includes(signature))
+  expect(polls.length).toBeGreaterThanOrEqual(2)
+  expect(ws.signatureSubscriptions).toEqual([])
+
+  // Rebroadcasting stops once the RPC knows the transaction.
+  const sendsAtDone = sent.length
+  await page.waitForTimeout(4_000)
+  expect(sent.length).toBe(sendsAtDone)
+  expect(errors).toEqual([])
 })

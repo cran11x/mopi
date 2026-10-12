@@ -20,14 +20,34 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Installs litesvm's prebuilt native binary for this runner (optional dep litesvm-linux-x64-gnu).
       - run: npm ci
+      - name: LiteSVM native binary loads
+        run: node -e "const { LiteSVM } = require('litesvm'); new LiteSVM().latestBlockhash(); console.log('litesvm ok on', process.platform, process.arch)"
       - run: npm run typecheck
+      # Unit tests plus the LiteSVM on-chain integration suite (src/lib/solana/onchain.test.ts).
       - run: npm test
       - run: npm run build
+      - name: App bundle does not include test-only Solana packages
+        run: |
+          if grep -rlE 'litesvm|@solana/spl-token' dist --include='*.js'; then
+            echo "::error::dist/ references a test-only dependency"; exit 1
+          fi
 
   e2e:
     runs-on: ubuntu-latest
     needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Default build: no service fee.
+          - name: no-fee-wallet
+            fee_wallet: ''
+          # Production-like build: the fee transfer path (deterministic test key, not a real wallet).
+          - name: fee-wallet
+            fee_wallet: 7e5pxK83ceXb2iWXBizF1U8MdL7C5VcVBBXpDWaYo3x1
+    name: e2e (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,13 +56,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # playwright.config.ts builds the app and serves it on :4173; RPC traffic is mocked.
+      # playwright.config.ts builds the app and serves it on :4173. RPC traffic is mocked
+      # (page.route) or answered by an in-process LiteSVM chain (e2e/onchain.spec.ts).
       - run: npm run e2e
         env:
           CI: 'true'
+          VITE_FEE_WALLET: ${{ matrix.fee_wallet }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: playwright-results-${{ matrix.name }}
           path: test-results/
           retention-days: 7

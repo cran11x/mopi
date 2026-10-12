@@ -28,12 +28,17 @@ export interface FakeWalletInit {
   publicKey: number[]
   /** Reject every signing request like a user pressing "Cancel" in the wallet. */
   rejectSigning: boolean
+  /**
+   * Name of a page function (page.exposeFunction) that signs for real: wire
+   * bytes in, signed wire bytes out. null → the deterministic dummy signature.
+   */
+  signer: string | null
 }
 
 export async function installFakeWallet(
   page: Page,
   publicKey: PublicKey,
-  opts: { name?: string; rejectSigning?: boolean } = {},
+  opts: { name?: string; rejectSigning?: boolean; signer?: string } = {},
 ): Promise<void> {
   const init: FakeWalletInit = {
     name: opts.name ?? FAKE_WALLET_NAME,
@@ -41,6 +46,7 @@ export async function installFakeWallet(
     address: publicKey.toBase58(),
     publicKey: Array.from(publicKey.toBytes()),
     rejectSigning: opts.rejectSigning ?? false,
+    signer: opts.signer ?? null,
   }
 
   await page.addInitScript((o: FakeWalletInit) => {
@@ -115,6 +121,16 @@ export async function installFakeWallet(
           signTransaction: async (...inputs: Array<{ transaction: Uint8Array }>) => {
             state.signCalls++
             if (o.rejectSigning) throw new Error('User rejected the request.')
+            if (o.signer) {
+              const sign = (window as unknown as Record<string, (bytes: number[]) => Promise<number[]>>)[o.signer]
+              return Promise.all(
+                inputs.map(async ({ transaction }) => {
+                  const signed = new Uint8Array(await sign(Array.from(transaction)))
+                  state.signedCount++
+                  return { signedTransaction: signed }
+                }),
+              )
+            }
             return inputs.map(({ transaction }) => {
               const bytes = new Uint8Array(transaction)
               if (bytes[0] !== 1) throw new Error(`fake wallet expects exactly 1 signature slot, got ${bytes[0]}`)

@@ -1,5 +1,5 @@
 import type { Page, Route, WebSocketRoute } from '@playwright/test'
-import { RPC_ROUTE, WS_ROUTE } from './solana'
+import { FALLBACK_RPC_ROUTE, RPC_ROUTE, WS_ROUTE } from './solana'
 
 // JSON-RPC mock for the Solana endpoint. The container (and CI) never talks to
 // a real RPC: every test that triggers RPC traffic installs this first.
@@ -7,6 +7,8 @@ import { RPC_ROUTE, WS_ROUTE } from './solana'
 export interface RpcCall {
   method: string
   params: unknown[]
+  /** Origin of the endpoint that received the call (primary or fallback). */
+  endpoint?: string
 }
 
 export class RpcError extends Error {
@@ -32,6 +34,8 @@ export interface RpcMock {
   /** Every JSON-RPC call received, in order (batched calls are flattened). */
   calls: RpcCall[]
   callsTo(method: string): RpcCall[]
+  /** Origins of every HTTP POST received, in order (including ones answered with `httpStatus`). */
+  posts: string[]
 }
 
 const CORS = {
@@ -43,14 +47,19 @@ const CORS = {
 
 export const context = (slot = 300_000_000) => ({ apiVersion: '2.2.0', slot })
 
-/** Installs the HTTP JSON-RPC mock on `page`. Handles single and batched (array) requests. */
+/**
+ * Installs the HTTP JSON-RPC mock on `page`. Handles single and batched (array) requests.
+ * The primary endpoint and the default fallback are answered by the same handlers, so the
+ * app's RPC failover (src/lib/solana/rpc.ts) lands on the same mocked chain.
+ */
 export async function mockRpc(page: Page, options: RpcMockOptions): Promise<RpcMock> {
   const calls: RpcCall[] = []
+  const posts: string[] = []
 
-  const answer = async (req: { id?: unknown; method?: unknown; params?: unknown }) => {
+  const answer = async (req: { id?: unknown; method?: unknown; params?: unknown }, endpoint: string) => {
     const method = typeof req.method === 'string' ? req.method : ''
     const params = Array.isArray(req.params) ? req.params : []
-    const call = { method, params }
+    const call = { method, params, endpoint }
     calls.push(call)
     const handler = options.handlers[method]
     if (!handler) {
@@ -67,12 +76,14 @@ export async function mockRpc(page: Page, options: RpcMockOptions): Promise<RpcM
     }
   }
 
-  await page.route(RPC_ROUTE, async (route: Route) => {
+  const handle = async (route: Route) => {
     const request = route.request()
     if (request.method() === 'OPTIONS') {
       await route.fulfill({ status: 204, headers: CORS })
       return
     }
+    const endpoint = new URL(request.url()).origin
+    posts.push(endpoint)
     if (options.httpStatus) {
       await route.fulfill({
         status: options.httpStatus,
@@ -89,18 +100,21 @@ export async function mockRpc(page: Page, options: RpcMockOptions): Promise<RpcM
       return
     }
     const payload = Array.isArray(body)
-      ? await Promise.all(body.map((b) => answer(b as Record<string, unknown>)))
-      : await answer((body ?? {}) as Record<string, unknown>)
+      ? await Promise.all(body.map((b) => answer(b as Record<string, unknown>, endpoint)))
+      : await answer((body ?? {}) as Record<string, unknown>, endpoint)
     await route.fulfill({
       status: 200,
       headers: { ...CORS, 'content-type': 'application/json' },
       body: JSON.stringify(payload),
     })
-  })
+  }
+  await page.route(RPC_ROUTE, handle)
+  await page.route(FALLBACK_RPC_ROUTE, handle)
 
   return {
     calls,
     callsTo: (method) => calls.filter((c) => c.method === method),
+    posts,
   }
 }
 
@@ -110,8 +124,10 @@ export interface WsMock {
 }
 
 /**
- * Mocks the RPC websocket used by Connection.confirmTransaction: answers
- * signatureSubscribe with an id, then pushes a successful signatureNotification.
+ * Mocks the RPC websocket. mopi confirms by HTTP polling (getSignatureStatuses) and should
+ * never subscribe; this mock records any signatureSubscribe so specs can assert that, and
+ * keeps such traffic off the real network. It answers signatureSubscribe with an id and a
+ * successful signatureNotification, like a real RPC would.
  */
 export async function mockRpcWebSocket(page: Page): Promise<WsMock> {
   const mock: WsMock = { signatureSubscriptions: [] }

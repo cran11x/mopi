@@ -3,6 +3,14 @@ import { CONFIG } from '../../config'
 
 // Dynamic priority fee: what recently landed transactions touching the same
 // accounts paid per compute unit, clamped to the deployment's floor and cap.
+//
+// In practice this is "the floor, with rare bumps": with lockedWritableAccounts
+// the RPC reports, per slot, the larger of the block's lowest landed price
+// (usually 0 on mainnet) and the lowest price paid by txs that locked those
+// accounts — and nobody else writes to the owner's wallet or token accounts.
+// The floor (CONFIG.priorityFeeMicroLamports) is what actually prices most
+// cleanups; a provider estimator (e.g. Helius getPriorityFeeEstimate) would be
+// needed to track real congestion.
 
 /** Percentile of recent non-zero prices used as the estimate. */
 export const PRIORITY_FEE_PERCENTILE = 0.75

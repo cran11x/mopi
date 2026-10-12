@@ -14,6 +14,7 @@ import {
 } from '@solana/web3.js'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  MAX_PRIORITY_FEE_MICROLAMPORTS,
   MAX_TRANSACTION_BYTES,
   assertSafeCleanupTransaction,
   buildBatchInstructions,
@@ -21,6 +22,7 @@ import {
   createCloseAccountInstruction,
   withBlockhash,
 } from './transactions'
+import { CONFIG } from '../../config'
 import { buildQuote, networkFeeFor } from './fees'
 import { classifyTokenAccount } from './classify'
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from './programs'
@@ -478,3 +480,38 @@ describe('fee basis: the service fee is bounded by what the closes can really re
     expect(() => assertSafeCleanupTransaction(tx, s.owner, batch, s.fee)).toThrow(/computed from the fee config/)
   })
 })
+
+describe('absolute priority fee ceiling (defense in depth)', () => {
+  it('matches the deployment cap, and a fee config priced above it is refused even though the tx matches the quote', () => {
+    expect(CONFIG.maxPriorityFeeMicroLamports).toBeLessThanOrEqual(MAX_PRIORITY_FEE_MICROLAMPORTS)
+
+    const owner = Keypair.generate().publicKey
+    const compile = (fee: ReturnType<typeof testFeeConfig>) => {
+      const batch = buildQuote([eligibleAccount(owner.toBase58())], fee).batches[0]
+      const msg = new TransactionMessage({
+        payerKey: owner,
+        recentBlockhash: Keypair.generate().publicKey.toBase58(),
+        instructions: buildBatchInstructions(owner, batch, fee),
+      }).compileToV0Message()
+      return { tx: new VersionedTransaction(msg), batch }
+    }
+
+    // At the cap: accepted, and the worst-case priority fee stays tiny next to one account's reclaim.
+    const atCap = testFeeConfig({ priorityFeeMicroLamports: MAX_PRIORITY_FEE_MICROLAMPORTS })
+    const ok = compile(atCap)
+    expect(() => assertSafeCleanupTransaction(ok.tx, owner, ok.batch, atCap)).not.toThrow()
+    expect(ok.batch.networkFeeLamports).toBe(networkFeeFor(ok.batch.computeUnitLimit, atCap))
+    expect(ok.batch.networkFeeLamports / ok.batch.reclaimLamports).toBeLessThan(0.01)
+
+    // A config that escaped the estimate's clamp (a future caller bug): 1000× the cap
+    // would pay more in priority fees than the close reclaims. Refused.
+    const escaped = testFeeConfig({ priorityFeeMicroLamports: MAX_PRIORITY_FEE_MICROLAMPORTS * 1000 })
+    const bad = compile(escaped)
+    expect(bad.batch.networkFeeLamports).toBeGreaterThan(bad.batch.reclaimLamports)
+    expect(() => assertSafeCleanupTransaction(bad.tx, owner, bad.batch, escaped)).toThrow(/priority fee/)
+    for (const v of [Number.NaN, -1, Infinity]) {
+      expect(() => assertSafeCleanupTransaction(ok.tx, owner, ok.batch, { ...atCap, priorityFeeMicroLamports: v })).toThrow()
+    }
+  })
+})
+

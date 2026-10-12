@@ -1,6 +1,6 @@
-import { useCallback, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useWallet } from '@solana/wallet-adapter-react'
-import { FEE_WALLET_UNFUNDED_MESSAGE, useCleaner } from '../../state/cleaner'
+import { FEE_WALLET_UNFUNDED_MESSAGE, STOP_WAITING_AFTER_MS, useCleaner } from '../../state/cleaner'
 import { useCluster } from '../../state/cluster'
 import { useWalletModal } from '../../state/walletModal'
 import { explorerTxUrl } from '../../config'
@@ -21,6 +21,9 @@ function walletLabel(address: string | null): string {
   return shortAddress(address)
 }
 
+/** Start of MESSAGES.walletModified (execute.ts is loaded lazily, so it is matched by text, not imported). */
+const WALLET_MODIFIED_PREFIX = 'Your wallet changed the transaction'
+
 /** Focus target on close when "Review" is gone or disabled (e.g. a refresh found nothing left). */
 const focusScanField = () => document.querySelector<HTMLElement>('.scan-form input')
 
@@ -32,11 +35,13 @@ export function ReviewModal() {
   // Errors that mean the scan is out of date (tokens arrived, account closed or
   // frozen, owner changed…) all say "rescan": retrying the same quote would just
   // fail again, so offer a fresh scan instead.
-  const needsRescan =
-    phase === 'error' &&
-    [cleanup.error, ...cleanup.progress.map((p) => (p.status === 'failed' ? p.error : null))].some(
-      (e) => typeof e === 'string' && /rescan/i.test(e),
-    )
+  const failures = [cleanup.error, ...cleanup.progress.map((p) => (p.status === 'failed' ? p.error : null))].filter(
+    (e): e is string => typeof e === 'string',
+  )
+  const needsRescan = phase === 'error' && failures.some((e) => /rescan/i.test(e))
+  // The wallet changes every transaction it signs (a fee override or tx
+  // protection setting): retrying as-is gives the same result, so don't offer it.
+  const walletChangesTx = phase === 'error' && failures.length > 0 && failures.every((e) => e.startsWith(WALLET_MODIFIED_PREFIX))
 
   const onClose = useCallback(() => {
     if (phase === 'done') resetCleanup()
@@ -74,7 +79,7 @@ export function ReviewModal() {
               <Button variant="secondary" onClick={closeReview}>
                 Close
               </Button>
-              {needsRescan ? (
+              {walletChangesTx ? null : needsRescan ? (
                 <Button
                   variant="primary"
                   disabled={!scan}
@@ -355,7 +360,15 @@ const STATUS: Record<BatchStatus, { label: string; icon: IconName | 'spin' | 'do
 }
 
 function ProgressStep() {
-  const { cleanup } = useCleaner()
+  const { cleanup, stopCleanup } = useCleaner()
+  // A wallet prompt that never returns, or a confirmation that takes long,
+  // must not trap the user in a dialog that can't be closed.
+  const [canStop, setCanStop] = useState(false)
+  useEffect(() => {
+    if (cleanup.isDemoRun) return
+    const timer = setTimeout(() => setCanStop(true), STOP_WAITING_AFTER_MS)
+    return () => clearTimeout(timer)
+  }, [cleanup.isDemoRun])
   return (
     <>
       <p className="review__lead">
@@ -369,6 +382,13 @@ function ProgressStep() {
         </p>
       ) : (
         <ProgressList progress={cleanup.progress} />
+      )}
+      {canStop && (
+        <div className="review__actions">
+          <Button variant="secondary" onClick={stopCleanup}>
+            Stop waiting
+          </Button>
+        </div>
       )}
     </>
   )
@@ -403,7 +423,7 @@ function ProgressList({ progress, hideError }: { progress: BatchProgress[]; hide
                 </span>
               </span>
               <span className="review__step-status">
-                {s.label}
+                {p.status === 'sending' && p.signature ? 'Confirming…' : s.label}
                 {p.status === 'confirmed' && cleanup.isDemoRun && ' (demo)'}
                 {p.signature && (
                   <a

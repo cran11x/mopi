@@ -28,7 +28,7 @@ export const RPC_URLS: Record<Cluster, string> = {
   devnet: env.VITE_SOLANA_DEVNET_RPC_URL?.trim() || 'https://api.devnet.solana.com',
 }
 
-/** Free public mainnet endpoint (CORS enabled) used when the primary fails, unless configured otherwise. */
+/** Free public mainnet endpoint (CORS enabled) used when the public default primary fails, unless configured otherwise. */
 export const DEFAULT_MAINNET_RPC_FALLBACK = 'https://solana-rpc.publicnode.com'
 
 /**
@@ -60,9 +60,23 @@ export function readRpcFallbacks(value: string | undefined, fallback: readonly s
   return out
 }
 
-/** Endpoints tried, in order, after the primary RPC fails (network error, HTTP 5xx / 403 / 429). */
+/**
+ * The public fallback is only a default for the public primary: an operator
+ * who set their own VITE_SOLANA_RPC_URL never has wallet addresses, scans or
+ * signed transactions sent to a third party they didn't choose (list it in
+ * VITE_SOLANA_RPC_FALLBACKS to opt in).
+ */
+export function defaultMainnetFallbacks(primaryFromEnv: string | undefined): string[] {
+  return primaryFromEnv?.trim() ? [] : [DEFAULT_MAINNET_RPC_FALLBACK]
+}
+
+/** Endpoints tried, in order, after the primary RPC fails (network error, timeout, endpoint-level HTTP error). */
 export const RPC_FALLBACKS: Record<Cluster, string[]> = {
-  'mainnet-beta': readRpcFallbacks(env.VITE_SOLANA_RPC_FALLBACKS, [DEFAULT_MAINNET_RPC_FALLBACK], RPC_URLS['mainnet-beta']),
+  'mainnet-beta': readRpcFallbacks(
+    env.VITE_SOLANA_RPC_FALLBACKS,
+    defaultMainnetFallbacks(env.VITE_SOLANA_RPC_URL),
+    RPC_URLS['mainnet-beta'],
+  ),
   devnet: readRpcFallbacks(env.VITE_SOLANA_DEVNET_RPC_FALLBACKS, [], RPC_URLS.devnet),
 }
 

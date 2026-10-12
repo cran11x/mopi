@@ -16,6 +16,14 @@ import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from './programs'
 /** Highest service fee assertSafeCleanupTransaction accepts (10%, matches the CONFIG cap). */
 export const MAX_SERVICE_FEE_BPS = 1_000
 
+/**
+ * Highest compute-unit price (µlamports/CU) assertSafeCleanupTransaction
+ * accepts, whatever the FeeConfig says (matches CONFIG.maxPriorityFeeMicroLamports).
+ * An absolute ceiling, so a fee config that escaped the estimate's clamp can
+ * never make a cleanup pay more in priority fees than it reclaims.
+ */
+export const MAX_PRIORITY_FEE_MICROLAMPORTS = 1_000_000
+
 /** Solana's maximum serialized transaction size. */
 export const MAX_TRANSACTION_BYTES = 1232
 
@@ -201,8 +209,8 @@ function readU64LE(data: Uint8Array, offset: number): bigint {
  *
  * Also bounds the network fee: the compute-unit limit may not exceed
  * `batch.computeUnitLimit` and the price may not exceed
- * `fee.priorityFeeMicroLamports`, so the priority fee can never exceed what
- * the quote displayed. The batch's own numbers (reclaim, service fee, CU
+ * `fee.priorityFeeMicroLamports` (itself at most MAX_PRIORITY_FEE_MICROLAMPORTS),
+ * so the priority fee can never exceed what the quote displayed. The batch's own numbers (reclaim, service fee, CU
  * limit, network fee) are re-derived from its accounts and `fee`, and the
  * service fee is independently capped at 10% and at the reclaim.
  */
@@ -238,6 +246,13 @@ export function assertSafeCleanupTransaction(
   const expectedLimit = computeUnitLimitFor(batch.accounts.length, fee)
   if (batch.computeUnitLimit !== expectedLimit) {
     fail(`batch compute unit limit ${batch.computeUnitLimit} != ${expectedLimit} computed from the fee config`)
+  }
+  if (
+    !Number.isFinite(fee.priorityFeeMicroLamports) ||
+    fee.priorityFeeMicroLamports < 0 ||
+    fee.priorityFeeMicroLamports > MAX_PRIORITY_FEE_MICROLAMPORTS
+  ) {
+    fail(`priority fee ${fee.priorityFeeMicroLamports} µlamports/CU is outside 0–${MAX_PRIORITY_FEE_MICROLAMPORTS}`)
   }
   const expectedNetworkFee = networkFeeFor(batch.computeUnitLimit, fee)
   if (batch.networkFeeLamports !== expectedNetworkFee) {
@@ -306,6 +321,9 @@ export function assertSafeCleanupTransaction(
         const price = readU64LE(data, 1)
         if (price > BigInt(Math.max(0, Math.floor(fee.priorityFeeMicroLamports)))) {
           fail(`${where}: compute unit price ${price} > ${fee.priorityFeeMicroLamports}`)
+        }
+        if (price > BigInt(MAX_PRIORITY_FEE_MICROLAMPORTS)) {
+          fail(`${where}: compute unit price ${price} > the ${MAX_PRIORITY_FEE_MICROLAMPORTS} ceiling`)
         }
       } else {
         fail(`${where}: ComputeBudget instruction type ${kind} is not allowed`)

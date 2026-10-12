@@ -16,8 +16,10 @@ const NO_ADAPTERS: never[] = []
 /**
  * One Connection config per cluster, built once (stable identity:
  * ConnectionProvider rebuilds its Connection whenever `config` changes). Its
- * fetch fails over to the configured fallback endpoints on network errors and
- * HTTP 5xx / 403 / 429 and remembers the endpoint that answered, per cluster.
+ * fetch bounds every attempt (RPC_ATTEMPT_TIMEOUT_MS), fails over to the
+ * configured fallback endpoints on network errors, timeouts and endpoint-level
+ * HTTP errors (401/402/403/404/408/410/429/5xx) and remembers the endpoint
+ * that answered, per cluster.
  * A 429 is first retried briefly (0.6 s, 1.2 s) instead of web3.js's own
  * ~15 s backoff, so the app can say "rate limited" quickly.
  */

@@ -15,16 +15,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CONFIRM_POLL_MS,
   MAX_CONFIRM_MS,
+  MAX_REBROADCASTS_PER_TICK,
   MESSAGES,
+  REBROADCAST_MAX_MS,
   REBROADCAST_MS,
   REBROADCAST_OPTIONS,
+  REBROADCAST_RATE_LIMIT_PAUSE_MS,
+  SEND_CONCURRENCY,
   SEND_OPTIONS,
   base58,
+  classifySendError,
+  createSignatureConfirmer,
   describeSendError,
   describeTransactionError,
   executeCleanup as runExecuteCleanup,
   isUserRejection,
+  rebroadcastDelay,
 } from './execute'
+import { WALLET_MESSAGES, describeWalletError } from './walletErrors'
 import { buildQuote } from './fees'
 import { TOKEN_PROGRAM_ID } from './programs'
 import { assertSafeCleanupTransaction } from './transactions'
@@ -373,15 +381,74 @@ describe('executeCleanup', () => {
     expect(result[2]).toMatchObject({ status: 'failed', signature: sigs[2], error: MESSAGES.alreadyClosed })
   })
 
-  it('a send error fails that batch only', async () => {
+  it('a send the RPC refuses (JSON-RPC error) fails that batch only and is never resent', async () => {
     const { ownerKp, fee, quote } = setup(45)
     const { c, connection } = mockConnection()
-    c.sendRawTransaction.mockRejectedValueOnce(new Error('Node is behind'))
+    c.sendRawTransaction.mockRejectedValueOnce(
+      new SendTransactionError({ action: 'simulate', signature: '', transactionMessage: 'Node is behind by 120 slots' }),
+    )
     const { w } = wallet(ownerKp, 'all')
     const result = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
-    expect(result[0]).toMatchObject({ status: 'failed' })
-    expect(result[0].error).toMatch(/Node is behind/)
+    expect(result[0]).toMatchObject({ status: 'failed', error: 'Could not send the transaction: Node is behind by 120 slots' })
+    expect(result[0].signature).toBeUndefined()
     expect(result.slice(1).every((p) => p.status === 'confirmed')).toBe(true)
+    const refused = sigOf(c.sendRawTransaction.mock.calls[0][0])
+    expect(c.sendRawTransaction.mock.calls.filter((call) => sigOf(call[0]) === refused)).toHaveLength(1)
+  })
+
+  it('a first send with no JSON-RPC answer (network error, timeout, HTTP 5xx) is tracked: it may have been forwarded', async () => {
+    const { ownerKp, fee, quote } = setup(45)
+    const { c, connection } = mockConnection()
+    c.sendRawTransaction
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new Error('524 <unknown status code>: origin timed out'))
+    const { w } = wallet(ownerKp, 'all')
+    const result = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    // The statuses say they landed (the mock confirms every signature): reported as such.
+    expect(result.map((p) => p.status)).toEqual(['confirmed', 'confirmed', 'confirmed'])
+    expect(result.every((p) => p.signature)).toBe(true)
+  })
+
+  it('"already been processed" on the first send (an earlier attempt landed) is tracked, not failed', async () => {
+    const { ownerKp, fee, quote } = setup(5)
+    const { c, connection } = mockConnection()
+    c.sendRawTransaction.mockRejectedValueOnce(
+      new SendTransactionError({
+        action: 'simulate',
+        signature: '',
+        transactionMessage: 'Transaction simulation failed: This transaction has already been processed',
+        logs: [],
+      }),
+    )
+    const { w } = wallet(ownerKp, 'all')
+    const result = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    expect(result[0]).toMatchObject({ status: 'confirmed', signature: sigOf(c.sendRawTransaction.mock.calls[0][0]) })
+  })
+
+  it(`first sends run ${SEND_CONCURRENCY} at a time, in order`, async () => {
+    const { ownerKp, fee, quote } = setup(100) // 5 batches
+    expect(quote.batches).toHaveLength(5)
+    const { c, connection } = mockConnection({ sendDelayMs: 1_000 })
+    const { w } = wallet(ownerKp, 'all')
+    let inFlight = 0
+    let peak = 0
+    const order: string[] = []
+    const original = c.sendRawTransaction.getMockImplementation()!
+    c.sendRawTransaction.mockImplementation(async (raw: Uint8Array, o?: unknown) => {
+      if (o !== SEND_OPTIONS) return original(raw, o)
+      order.push(sigOf(raw))
+      peak = Math.max(peak, ++inFlight)
+      try {
+        return await original(raw, o)
+      } finally {
+        inFlight--
+      }
+    })
+    const { value: result, elapsed } = await drive(runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} }))
+    expect(result.every((p) => p.status === 'confirmed')).toBe(true)
+    expect(peak).toBe(SEND_CONCURRENCY)
+    expect(order).toEqual(result.map((p) => p.signature))
+    expect(elapsed).toBeLessThan(5 * 1_000)
   })
 
   it('a blockhash/build failure fails every batch without prompting', async () => {
@@ -483,9 +550,10 @@ describe('describeTransactionError', () => {
     expect(
       describeTransactionError({ InsufficientFundsForRent: { account_index: 2 } }, [], [], { accountKeys, feeWallet }),
     ).toBe(MESSAGES.feeWalletUnfunded)
+    // Index 0 is the fee payer: paying the fee would take the wallet below the minimum (seen on the real runtime, onchain.test.ts).
     expect(
       describeTransactionError({ InsufficientFundsForRent: { account_index: 0 } }, [], [], { accountKeys, feeWallet }),
-    ).toBe(MESSAGES.rent)
+    ).toBe(MESSAGES.feePayerRent)
     expect(describeTransactionError('BlockhashNotFound')).toBe(MESSAGES.blockhash)
   })
 
@@ -510,7 +578,15 @@ describe('describeTransactionError', () => {
 
 describe('isUserRejection', () => {
   it('detects wallet rejections', () => {
-    expect(isUserRejection(Object.assign(new Error('x'), { name: 'WalletSignTransactionError' }))).toBe(true)
+    // wallet-adapter wraps every wallet error in WalletSignTransactionError: the name alone means nothing.
+    const wrapped = (message: string, error?: unknown) => Object.assign(new Error(message), { name: 'WalletSignTransactionError', error })
+    expect(isUserRejection(wrapped('x'))).toBe(false)
+    expect(isUserRejection(wrapped('Ledger device: UNKNOWN_ERROR (0x6808)'))).toBe(false)
+    expect(isUserRejection(wrapped('Unexpected error', { code: 4001, message: 'x' }))).toBe(true)
+    expect(isUserRejection(wrapped('User rejected the request.', { code: 4001 }))).toBe(true)
+    expect(isUserRejection(wrapped('Ledger device: Condition of use not satisfied (denied by the user?) (0x6985)'))).toBe(true)
+    expect(isUserRejection(Object.assign(new Error('nope'), { code: 4001 }))).toBe(true)
+    expect(isUserRejection('User cancelled')).toBe(true)
     expect(isUserRejection(new Error('User rejected the request.'))).toBe(true)
     expect(isUserRejection(new Error('Request declined'))).toBe(true)
     expect(isUserRejection(new Error('Cancelled by user'))).toBe(true)
@@ -753,10 +829,29 @@ describe('blockhash lifetime and confirmation', () => {
       .mockRejectedValueOnce(
         new SendTransactionError({ action: 'simulate', signature: '', transactionMessage: 'Transaction simulation failed: Blockhash not found', logs: [] }),
       )
+    // Fine for the pre-send check; past lastValidBlockHeight (99) when the dead blockhash is double-checked.
+    c.getBlockHeight.mockResolvedValueOnce(50).mockResolvedValue(500)
     const { w } = wallet(ownerKp, 'all')
     const progress = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
     expect(progress.map((p) => p.error)).toEqual([MESSAGES.hasTokens, MESSAGES.expired])
     expect(progress.every((p) => p.status === 'failed')).toBe(true)
+    // Neither was resent: one first send each.
+    expect(c.sendRawTransaction).toHaveBeenCalledTimes(2)
+  })
+
+  it('preflight "Blockhash not found" while the blockhash is still valid (a lagging node): the same bytes go out without preflight and are tracked', async () => {
+    const { ownerKp, fee, quote } = setup(5)
+    const { c, connection } = mockConnection()
+    c.sendRawTransaction.mockRejectedValueOnce(
+      new SendTransactionError({ action: 'simulate', signature: '', transactionMessage: 'Transaction simulation failed: Blockhash not found', logs: [] }),
+    )
+    const { w } = wallet(ownerKp, 'all')
+    const progress = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    expect(progress[0]).toMatchObject({ status: 'confirmed' })
+    const [first, second] = c.sendRawTransaction.mock.calls
+    expect(first[1]).toBe(SEND_OPTIONS)
+    expect(second[1]).toEqual(REBROADCAST_OPTIONS)
+    expect(Buffer.from(second[0]).equals(Buffer.from(first[0]))).toBe(true)
   })
 })
 
@@ -974,7 +1069,57 @@ describe('base58', () => {
   })
 })
 
+describe('describeWalletError', () => {
+  it('declines, Ledger blind signing and a locked Ledger get actionable text; anything else keeps the raw message', () => {
+    const wrapped = (message: string) => Object.assign(new Error(message), { name: 'WalletSignTransactionError' })
+    expect(describeWalletError(wrapped('User rejected the request.'))).toBe(WALLET_MESSAGES.declined)
+    expect(describeWalletError(wrapped('Ledger device: UNKNOWN_ERROR (0x6808)'))).toBe(WALLET_MESSAGES.ledgerBlindSigning)
+    expect(describeWalletError(wrapped('Ledger device: UNKNOWN_ERROR (0x6a81)'))).toBe(WALLET_MESSAGES.ledgerBlindSigning)
+    expect(describeWalletError(wrapped('Ledger device: Locked device (0x5515)'))).toBe(WALLET_MESSAGES.ledgerLocked)
+    expect(describeWalletError(wrapped('Internal error'))).toBeNull()
+  })
+
+  it('a non-rejection signing error fails the batches with the readable reason (not "skipped")', async () => {
+    const { ownerKp, fee, quote } = setup(5)
+    const { connection } = mockConnection()
+    const err = Object.assign(new Error('Ledger device: UNKNOWN_ERROR (0x6808)'), { name: 'WalletSignTransactionError' })
+    const { w } = wallet(ownerKp, 'all', { signAll: async () => Promise.reject(err) })
+    const rec = recorder()
+    await expect(executeCleanup({ connection, wallet: w, quote, fee, onProgress: rec.onProgress })).rejects.toBe(err)
+    expect(rec.last()[0]).toMatchObject({ status: 'failed', error: WALLET_MESSAGES.ledgerBlindSigning })
+  })
+})
+
+describe('classifySendError', () => {
+  const rpc = (m: string) => new SendTransactionError({ action: 'simulate', signature: '', transactionMessage: m, logs: [] })
+  it('only a JSON-RPC answer about the tx is a definite rejection', () => {
+    expect(classifySendError(rpc('Transaction simulation failed: Error processing Instruction 2: custom program error: 0xb'))).toBe('rejected')
+    expect(classifySendError(rpc('Transaction signature verification failure'))).toBe('rejected')
+    expect(classifySendError(rpc('Transaction simulation failed: This transaction has already been processed'))).toBe('already-processed')
+    expect(classifySendError(rpc('Transaction simulation failed: Blockhash not found'))).toBe('blockhash-not-found')
+    expect(classifySendError(new TypeError('Failed to fetch'))).toBe('uncertain')
+    expect(classifySendError(new Error('502 Bad Gateway: upstream'))).toBe('uncertain')
+    expect(classifySendError(Object.assign(new Error('RPC request timed out after 15 s'), { name: 'RpcTimeoutError' }))).toBe('uncertain')
+    expect(classifySendError(undefined)).toBe('uncertain')
+  })
+})
+
 describe('describeSendError', () => {
+  it('shows the RPC’s own words, not web3.js developer text', () => {
+    const err = new SendTransactionError({
+      action: 'simulate',
+      signature: '',
+      transactionMessage: 'Transaction simulation failed: Error processing Instruction 0: invalid account data for instruction',
+      logs: [],
+    })
+    expect(err.message).toMatch(/Catch the `SendTransactionError`/)
+    const text = describeSendError(err)
+    expect(text).toBe('Could not send the transaction: Transaction simulation failed: Error processing Instruction 0: invalid account data for instruction')
+    expect(text).not.toMatch(/getLogs|Simulation failed\. \nMessage/)
+  })
+})
+
+describe('describeSendError (preflight messages)', () => {
   const feeWallet = randomKey().toBase58()
   const ctx = { accountKeys: [randomKey().toBase58(), feeWallet], feeWallet }
   it('maps preflight messages', () => {
@@ -987,6 +1132,9 @@ describe('describeSendError', () => {
     ).toBe(MESSAGES.feeWalletUnfunded)
     expect(
       describeSendError(preflight('Transaction simulation failed: Transaction results in an account (0) with insufficient funds for rent'), [], ctx),
+    ).toBe(MESSAGES.feePayerRent)
+    expect(
+      describeSendError(preflight('Transaction simulation failed: Transaction results in an account (2) with insufficient funds for rent'), [], ctx),
     ).toBe(MESSAGES.rent)
     expect(describeSendError(new Error('Node is behind'))).toBe('Could not send the transaction: Node is behind')
   })
@@ -1273,5 +1421,173 @@ describe('wire-level behaviour through a real Connection', () => {
     const progress = await executeCleanup({ connection: conn, wallet: signingWallet(kp), quote, fee, onProgress: () => {} })
     expect(progress[0]).toMatchObject({ status: 'failed', error: MESSAGES.hasTokens })
     expect(progress[0].signature).toBeUndefined()
+  })
+})
+
+// ── Rebroadcast volume: bounded however many batches a run has ──────────────
+
+describe('rebroadcast volume', () => {
+  type Status = { err: null; confirmationStatus: string } | null
+  function confirmerConn(statusOf: (sig: string) => Status, height = () => 100) {
+    const sent: Array<{ bytes: Uint8Array; opts: unknown; at: number }> = []
+    const conn = {
+      getSignatureStatuses: vi.fn(async (sigs: string[]) => ({ context: { slot: 1 }, value: sigs.map(statusOf) })),
+      getBlockHeight: vi.fn(async () => height()),
+      sendRawTransaction: vi.fn(async (b: Uint8Array, opts: unknown) => {
+        sent.push({ bytes: Uint8Array.from(b), opts, at: Date.now() })
+        return 'attacker-chosen-signature'
+      }),
+    }
+    return { conn, sent }
+  }
+  const bytesFor = (k: number) => Uint8Array.from({ length: 200 }, (_, i) => (i + k) & 0xff)
+
+  it('backs off: every REBROADCAST_MS at first, doubling, capped at REBROADCAST_MAX_MS', () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 9, 50].map(rebroadcastDelay)).toEqual([
+      REBROADCAST_MS, REBROADCAST_MS, REBROADCAST_MS,
+      2 * REBROADCAST_MS, 2 * REBROADCAST_MS, 2 * REBROADCAST_MS,
+      REBROADCAST_MAX_MS, REBROADCAST_MAX_MS, REBROADCAST_MAX_MS,
+    ])
+  })
+
+  it('never sends anything but the exact tracked bytes, with skipPreflight + maxRetries 0, and nothing after expiry', async () => {
+    const bytes = bytesFor(0)
+    let height = 100
+    const { conn, sent } = confirmerConn(() => null, () => height)
+    const outcome = createSignatureConfirmer(conn as never).track('sig', bytes, 150)
+    for (let k = 0; k < 40; k++) {
+      await vi.advanceTimersByTimeAsync(1_000)
+      if (k === 20) height = 151 // blockhash expires
+    }
+    expect(await outcome).toEqual({ status: 'expired' })
+    expect(sent.length).toBeGreaterThan(3)
+    for (const s of sent) {
+      expect(Array.from(s.bytes)).toEqual(Array.from(bytes))
+      expect(s.opts).toEqual(REBROADCAST_OPTIONS)
+    }
+    const n = sent.length
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(sent.length).toBe(n)
+  })
+
+  it('a signature the network already has (processed) is not rebroadcast; one that disappears again (dropped fork) is', async () => {
+    let status: Status = { err: null, confirmationStatus: 'processed' }
+    const { conn, sent } = confirmerConn(() => status)
+    const outcome = createSignatureConfirmer(conn as never).track('sig', bytesFor(1), 1_000)
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(sent).toHaveLength(0)
+    status = null
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(sent.length).toBeGreaterThan(0)
+    status = { err: null, confirmationStatus: 'confirmed' }
+    await vi.advanceTimersByTimeAsync(CONFIRM_POLL_MS)
+    expect(await outcome).toEqual({ status: 'confirmed' })
+  })
+
+  it(`50 unconfirmed batches: at most ${MAX_REBROADCASTS_PER_TICK} rebroadcasts per poll, oldest first, every tx still gets its turn`, async () => {
+    const { conn, sent } = confirmerConn(() => null)
+    const confirmer = createSignatureConfirmer(conn as never)
+    for (let k = 0; k < 50; k++) void confirmer.track(`sig${k}`, bytesFor(k), 1_000)
+    const polls = () => conn.getSignatureStatuses.mock.calls.length
+    let last = 0
+    let lastPolls = 0
+    for (let t = 0; t < 60; t++) {
+      await vi.advanceTimersByTimeAsync(1_000)
+      const roundSends = sent.length - last
+      const roundPolls = polls() - lastPolls
+      expect(roundSends).toBeLessThanOrEqual(MAX_REBROADCASTS_PER_TICK * Math.max(1, roundPolls))
+      last = sent.length
+      lastPolls = polls()
+    }
+    // ~0.5 sends/s on average instead of 50 / 2.5 s = 20 sends/s.
+    expect(sent.length).toBeLessThanOrEqual(Math.ceil(60_000 / CONFIRM_POLL_MS) * MAX_REBROADCASTS_PER_TICK)
+    const distinct = new Set(sent.map((s) => s.bytes[0]))
+    expect(distinct.size).toBe(50)
+  })
+
+  it('a rate-limited (429) rebroadcast pauses all rebroadcasts', async () => {
+    const { conn, sent } = confirmerConn(() => null)
+    conn.sendRawTransaction.mockImplementation(async (b: Uint8Array, opts: unknown) => {
+      sent.push({ bytes: Uint8Array.from(b), opts, at: Date.now() })
+      throw new Error('429 Too Many Requests: {"jsonrpc":"2.0","error":{"code":429}}')
+    })
+    const confirmer = createSignatureConfirmer(conn as never)
+    for (let k = 0; k < 3; k++) void confirmer.track(`sig${k}`, bytesFor(k), 1_000)
+    await vi.advanceTimersByTimeAsync(REBROADCAST_MS + CONFIRM_POLL_MS)
+    const first = sent.length
+    expect(first).toBeGreaterThan(0)
+    const pausedAt = sent[sent.length - 1].at
+    await vi.advanceTimersByTimeAsync(REBROADCAST_RATE_LIMIT_PAUSE_MS - CONFIRM_POLL_MS)
+    expect(sent.filter((s) => s.at > pausedAt)).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(3 * CONFIRM_POLL_MS)
+    expect(sent.length).toBeGreaterThan(first)
+  })
+})
+
+describe('signature tracking: base58 of the verified bytes', () => {
+  /** Independent reference base58 (BigInt). */
+  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+  const reference = (bytes: Uint8Array): string => {
+    let n = 0n
+    for (const b of bytes) n = n * 256n + BigInt(b)
+    let out = ''
+    while (n > 0n) {
+      out = ALPHABET[Number(n % 58n)] + out
+      n /= 58n
+    }
+    for (const b of bytes) {
+      if (b !== 0) break
+      out = '1' + out
+    }
+    return out
+  }
+
+  it('matches bs58 (what web3.js / RPCs use), including leading zero bytes', () => {
+    for (let k = 0; k < 300; k++) {
+      const bytes = new Uint8Array(64)
+      crypto.getRandomValues(bytes)
+      for (let z = 0; z < k % 7; z++) bytes[z] = 0
+      expect(base58(bytes)).toBe(reference(bytes))
+    }
+    expect(base58(new Uint8Array(64))).toBe(reference(new Uint8Array(64)))
+  })
+})
+
+describe('wallet-level trouble', () => {
+  it('a wallet that changes the transaction: actionable message, and the reason is logged for support', async () => {
+    const { ownerKp, fee, quote } = setup(5)
+    const { c, connection } = mockConnection()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { w } = wallet(ownerKp, 'all', { signAll: async (txs) => txs.map((t) => tamper(t, ownerKp)) })
+    const result = await executeCleanup({ connection, wallet: w, quote, fee, onProgress: () => {} })
+    expect(result[0]).toMatchObject({ status: 'failed', error: MESSAGES.walletModified })
+    expect(MESSAGES.walletModified).toMatch(/Nothing was charged/)
+    expect(warn.mock.calls.some((call) => /batch 0 rejected: Unsafe transaction .*System instruction/.test(String(call[0])))).toBe(true)
+    expect(c.sendRawTransaction).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('a wallet prompt that never returns: aborting stops waiting, nothing is sent, even if the wallet answers later', async () => {
+    const { ownerKp, fee, quote } = setup(5)
+    const { c, connection } = mockConnection()
+    let answer: (txs: VersionedTransaction[]) => void = () => {}
+    const { w } = wallet(ownerKp, 'all', {
+      signAll: (txs) =>
+        new Promise((resolve) => {
+          answer = () => {
+            txs.forEach((t) => t.sign([ownerKp]))
+            resolve(txs)
+          }
+        }),
+    })
+    const ac = new AbortController()
+    const rec = recorder()
+    const run = runExecuteCleanup({ connection, wallet: w, quote, fee, onProgress: rec.onProgress, signal: ac.signal })
+    setTimeout(() => ac.abort(), 60_000)
+    await expect(drive(run, 1_000)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(rec.last()[0].status).toBe('skipped')
+    answer([])
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(c.sendRawTransaction).not.toHaveBeenCalled()
   })
 })
