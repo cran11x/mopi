@@ -32,7 +32,7 @@ export function formatSol(
   const whole = Math.floor(rounded / 10 ** places)
   const frac = rounded % 10 ** places
   let text = places > 0 ? `${whole}.${String(frac).padStart(places, '0')}` : String(whole)
-  if (places > decimals) text = text.replace(/0+$/, '')
+  if (places > decimals) text = text.replace(/0+$/, '').replace(/\.$/, '')
 
   let prefix = ''
   if (sign === 'always-minus' && abs > 0) prefix = '−'
