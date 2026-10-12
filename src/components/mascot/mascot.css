@@ -1,0 +1,21 @@
+.mascot {
+  height: auto;
+  user-select: none;
+}
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.logo__word {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+.logo--sm .logo__word {
+  font-size: 25px;
+}
