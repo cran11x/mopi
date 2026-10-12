@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
+    "@solana/spl-token": "0.4.14",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
     "@types/node": "22.18.0",
@@ -22,6 +23,7 @@
     "@types/react-dom": "19.1.9",
     "@vitejs/plugin-react": "5.2.0",
     "jsdom": "26.1.0",
+    "litesvm": "0.8.0",
     "typescript": "5.9.3",
     "vite": "7.3.7",
     "vitest": "3.2.7"
