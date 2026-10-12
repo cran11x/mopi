@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { buildQuote, computeUnitLimitFor, defaultFeeConfig, networkFeeFor, serviceFeeFor } from './fees'
+import {
+  MAX_TOKEN_2022_ACCOUNT_SPACE,
+  buildQuote,
+  computeUnitLimitFor,
+  defaultFeeConfig,
+  feeBasisFor,
+  maxRentDepositFor,
+  networkFeeFor,
+  rentExemptMinimum,
+  serviceFeeFor,
+} from './fees'
 import { CONFIG } from '../../config'
-import { RENT, eligibleAccount, randomAddress, testFeeConfig } from '../../test/solanaFixtures'
+import { RENT, T22, eligibleAccount, randomAddress, testFeeConfig } from '../../test/solanaFixtures'
 
 const OWNER = randomAddress()
 const many = (n: number, lamports = RENT) => Array.from({ length: n }, () => eligibleAccount(OWNER, { lamports }))
@@ -90,6 +100,40 @@ describe('buildQuote', () => {
     expect(networkFeeFor(cu, fee)).toBe(5_000 + 2_440)
     expect(networkFeeFor(1, testFeeConfig({ priorityFeeMicroLamports: 1 }))).toBe(5_001)
     expect(networkFeeFor(cu, testFeeConfig({ priorityFeeMicroLamports: 0 }))).toBe(5_000)
+  })
+})
+
+describe('fee basis', () => {
+  it('rent-exempt minimum matches the cluster rent for token accounts', () => {
+    expect(rentExemptMinimum(165)).toBe(RENT)
+    expect(rentExemptMinimum(182)).toBe(2_157_600)
+    expect(rentExemptMinimum(0)).toBe(890_880)
+    expect(MAX_TOKEN_2022_ACCOUNT_SPACE).toBe(205)
+    expect(maxRentDepositFor({ program: 'spl-token' })).toBe(RENT)
+    expect(maxRentDepositFor({ program: 'token-2022' })).toBe(rentExemptMinimum(205))
+  })
+
+  it('each account counts at most its plausible rent deposit', () => {
+    const spl = eligibleAccount(OWNER, { lamports: 1_000_000_000 })
+    const t22 = eligibleAccount(OWNER, { program: 'token-2022', programId: T22, lamports: 1_000_000_000 })
+    const honest = eligibleAccount(OWNER, { program: 'token-2022', programId: T22, lamports: 2_157_600 })
+    expect(feeBasisFor([spl, t22, honest])).toBe(RENT + rentExemptMinimum(205) + 2_157_600)
+    expect(feeBasisFor([eligibleAccount(OWNER, { lamports: 0 })])).toBe(0)
+  })
+
+  it('the quote shows the full reclaim but charges the fee on the capped basis', () => {
+    const fee = testFeeConfig({ serviceFeeBps: 400 })
+    const q = buildQuote([eligibleAccount(OWNER, { lamports: RENT + 1_000_000 }), eligibleAccount(OWNER)], fee)
+    expect(q.reclaimLamports).toBe(2 * RENT + 1_000_000)
+    expect(q.serviceFeeLamports).toBe(serviceFeeFor(2 * RENT, fee))
+  })
+
+  it('a repeated address is quoted once', () => {
+    const a = eligibleAccount(OWNER)
+    const q = buildQuote([a, { ...a }, eligibleAccount(OWNER)], testFeeConfig())
+    expect(q.accountCount).toBe(2)
+    expect(q.batches[0].accounts.map((x) => x.address)[0]).toBe(a.address)
+    expect(q.reclaimLamports).toBe(2 * RENT)
   })
 })
 

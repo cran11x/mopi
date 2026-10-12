@@ -19,11 +19,13 @@ import {
   buildBatchInstructions,
   buildCleanupTransactions,
   createCloseAccountInstruction,
+  withBlockhash,
 } from './transactions'
-import { buildQuote } from './fees'
+import { buildQuote, networkFeeFor } from './fees'
+import { classifyTokenAccount } from './classify'
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from './programs'
 import type { CleanupBatch, FeeConfig, TokenAccountInfo } from '../types'
-import { SPL, T22, eligibleAccount, randomAddress, randomKey, testFeeConfig } from '../../test/solanaFixtures'
+import { RENT, SPL, T22, eligibleAccount, rawAccount, randomAddress, randomKey, testFeeConfig } from '../../test/solanaFixtures'
 
 const BLOCKHASH = Keypair.generate().publicKey.toBase58()
 
@@ -187,6 +189,37 @@ describe('buildCleanupTransactions', () => {
       buildCleanupTransactions({ connection, owner, quote, fee: { ...fee, feeWallet: 'nope' } }),
     ).rejects.toThrow()
     expect(connection.getLatestBlockhash).not.toHaveBeenCalled()
+  })
+
+  it('refuses an account that appears in two batches, before any RPC call', async () => {
+    const { owner, fee } = setup()
+    const accounts = Array.from({ length: 20 }, () => eligibleAccount(owner.toBase58()))
+    const first = buildQuote(accounts, fee)
+    const dup = { ...buildQuote([accounts[5]], fee).batches[0], index: 1 }
+    const quote = { ...first, batches: [...first.batches, dup] }
+    const connection = mockConnection()
+    await expect(buildCleanupTransactions({ connection, owner, quote, fee })).rejects.toThrow(/appears in batch 0 and batch 1/)
+    expect(connection.getLatestBlockhash).not.toHaveBeenCalled()
+  })
+})
+
+describe('withBlockhash', () => {
+  it('changes only the blockhash; the result is unsigned and still passes the safety check', async () => {
+    const { ownerKp, owner, fee, quote } = setup({ n: 5, mixed: true })
+    const { transactions } = await buildCleanupTransactions({ connection: mockConnection(), owner, quote, fee })
+    transactions[0].sign([ownerKp])
+    const next = randomAddress()
+    const out = withBlockhash(transactions[0], next)
+    expect(out.message.recentBlockhash).toBe(next)
+    expect(out.signatures).toHaveLength(1)
+    expect(out.signatures[0].every((b) => b === 0)).toBe(true)
+    expect(out.message.staticAccountKeys.map(String)).toEqual(transactions[0].message.staticAccountKeys.map(String))
+    const plain = (t: VersionedTransaction) =>
+      t.message.compiledInstructions.map((ix) => ({ ...ix, data: Array.from(ix.data), accountKeyIndexes: [...ix.accountKeyIndexes] }))
+    expect(plain(out)).toEqual(plain(transactions[0]))
+    expect(out.message.header).toEqual(transactions[0].message.header)
+    expect(transactions[0].message.recentBlockhash).toBe(BLOCKHASH) // input untouched
+    expect(() => assertSafeCleanupTransaction(out, owner, quote.batches[0], fee)).not.toThrow()
   })
 })
 
@@ -397,5 +430,51 @@ describe('assertSafeCleanupTransaction', () => {
   it('rejects when a fee is due but the configured fee wallet is invalid', () => {
     const s = setup()
     expectReject(s, compile(s.owner, build(s)), /fee wallet is not a valid public key/, s.batch, { ...s.fee, feeWallet: 'demo-fee-wallet' })
+  })
+
+  it('rejects a batch whose compute unit limit or network fee does not match the fee config', () => {
+    const s = setup({ n: 1 })
+    // Tampered/buggy batch: 1.4M CU while networkFeeLamports still shows the 8,000-CU estimate.
+    const bigCu = { ...s.batch, computeUnitLimit: 1_400_000 }
+    expect(networkFeeFor(bigCu.computeUnitLimit, s.fee)).toBeGreaterThan(bigCu.networkFeeLamports)
+    expectReject(s, compile(s.owner, buildBatchInstructions(s.owner, bigCu, s.fee)), /compute unit limit 1400000 != 8000/, bigCu)
+    const wrongFee = { ...s.batch, networkFeeLamports: s.batch.networkFeeLamports + 1 }
+    expectReject(s, compile(s.owner, build(s)), /network fee/, wrongFee)
+  })
+
+  it('rejects a service fee rate outside 0–10%', () => {
+    const s = setup({ n: 1, fee: { serviceFeeBps: 1_001 } })
+    expectReject(s, compile(s.owner, build(s)), /outside 0–1000/)
+    const t = setup({ n: 1, fee: { serviceFeeBps: 12.5 } })
+    expectReject(t, compile(t.owner, build(t)), /outside 0–1000/)
+  })
+})
+
+describe('fee basis: the service fee is bounded by what the closes can really return', () => {
+  it('an RPC that inflates lamports of plain SPL accounts cannot make the fee exceed the real reclaim', async () => {
+    const kp = Keypair.generate()
+    const owner = kp.publicKey.toBase58()
+    const fee = testFeeConfig({ serviceFeeBps: 400 })
+    // A 165-byte non-native SPL token account holds its rent deposit (2,039,280) unless someone
+    // donated SOL to it; the RPC claims 1 SOL each.
+    const accounts = Array.from({ length: 20 }, () =>
+      classifyTokenAccount(rawAccount(owner, {}, { lamports: 1_000_000_000 }), owner),
+    )
+    expect(accounts.every((a) => a.status === 'eligible')).toBe(true)
+    const quote = buildQuote(accounts, fee)
+    const { transactions } = await buildCleanupTransactions({ connection: mockConnection(), owner: kp.publicKey, quote, fee })
+    expect(() => assertSafeCleanupTransaction(transactions[0], kp.publicKey, quote.batches[0], fee)).not.toThrow()
+
+    const realReclaim = 20 * RENT // what CloseAccount actually returns on-chain
+    expect(quote.serviceFeeLamports).toBe(Math.floor((realReclaim * 400) / 10_000))
+    expect(quote.serviceFeeLamports).toBeLessThanOrEqual(realReclaim)
+  })
+
+  it('a batch charging the fee on raw (uncapped) lamports is rejected', () => {
+    const s = setup({ n: 1 })
+    const accounts = [{ ...s.accounts[0], lamports: 1_000_000_000 }]
+    const batch = { ...s.batch, accounts, reclaimLamports: 1_000_000_000, serviceFeeLamports: 40_000_000 }
+    const tx = compile(s.owner, buildBatchInstructions(s.owner, batch, s.fee))
+    expect(() => assertSafeCleanupTransaction(tx, s.owner, batch, s.fee)).toThrow(/computed from the fee config/)
   })
 })

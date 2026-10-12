@@ -36,6 +36,8 @@ export type ExecuteBlocker =
   | 'wrong-wallet'
   | 'nothing-selected'
   | 'wallet-cannot-sign'
+  /** The scan is from another cluster than the active connection, or a rescan is in flight. */
+  | 'stale-scan'
   | null
 
 export interface CleanupState {
@@ -130,6 +132,8 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
   const [cleanup, setCleanup] = useState<CleanupState>(IDLE_CLEANUP)
 
   const scanSeq = useRef(0)
+  /** Set synchronously while a cleanup runs; the render-time `cleanup.phase` can be stale. */
+  const executingRef = useRef(false)
   const scanAbort = useRef<AbortController | null>(null)
 
   const applyScan = useCallback((result: ScanResult) => {
@@ -252,11 +256,12 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
   const executeBlocker: ExecuteBlocker = useMemo(() => {
     if (!scan || !quote || quote.accountCount === 0) return 'nothing-selected'
     if (scan.isDemo) return 'demo'
+    if (scan.cluster !== cluster || scanStatus === 'scanning') return 'stale-scan'
     if (!wallet.publicKey) return 'not-connected'
     if (wallet.publicKey.toBase58() !== scan.owner) return 'wrong-wallet'
     if (!wallet.signAllTransactions && !wallet.signTransaction) return 'wallet-cannot-sign'
     return null
-  }, [scan, quote, wallet.publicKey, wallet.signAllTransactions, wallet.signTransaction])
+  }, [scan, quote, cluster, scanStatus, wallet.publicKey, wallet.signAllTransactions, wallet.signTransaction])
 
   const openReview = useCallback(() => {
     setCleanup((c) => (c.phase === 'executing' ? c : { ...IDLE_CLEANUP, phase: 'review' }))
@@ -293,15 +298,25 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
 
   const startCleanup = useCallback(async () => {
     if (!quote || !scan || quote.accountCount === 0) return
-    if (cleanup.phase === 'executing') return
+    if (executingRef.current || cleanup.phase === 'executing') return
     if (scan.isDemo) {
-      await runDemoCleanup(quote)
+      executingRef.current = true
+      try {
+        await runDemoCleanup(quote)
+      } finally {
+        executingRef.current = false
+      }
       return
     }
     if (executeBlocker) {
-      setCleanup((c) => ({ ...c, phase: 'error', error: 'Connect the wallet that owns these accounts to continue.' }))
+      const error =
+        executeBlocker === 'stale-scan'
+          ? 'These results are from another network or are being refreshed. Rescan, then try again.'
+          : 'Connect the wallet that owns these accounts to continue.'
+      setCleanup((c) => ({ ...c, phase: 'error', error }))
       return
     }
+    executingRef.current = true
     const quoteAtStart = quote
     setCleanup({ phase: 'executing', progress: [], error: null, result: null, isDemoRun: false })
     try {
@@ -344,6 +359,8 @@ export function CleanerProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       setCleanup((c) => ({ ...c, phase: 'error', error: describeError(err) }))
+    } finally {
+      executingRef.current = false
     }
   }, [cleanup.phase, cluster, connection, executeBlocker, feeConfig, quote, runDemoCleanup, scan, wallet])
 

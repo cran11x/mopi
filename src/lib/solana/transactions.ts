@@ -1,6 +1,7 @@
 import { Buffer } from 'buffer'
 import {
   ComputeBudgetProgram,
+  MessageV0,
   PublicKey,
   SystemProgram,
   TransactionInstruction,
@@ -9,8 +10,11 @@ import {
   type Connection,
 } from '@solana/web3.js'
 import type { CleanupBatch, CleanupQuote, FeeConfig, TokenAccountInfo } from '../types'
-import { serviceFeeFor } from './fees'
+import { computeUnitLimitFor, feeBasisFor, networkFeeFor, serviceFeeFor } from './fees'
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from './programs'
+
+/** Highest service fee assertSafeCleanupTransaction accepts (10%, matches the CONFIG cap). */
+export const MAX_SERVICE_FEE_BPS = 1_000
 
 /** Solana's maximum serialized transaction size. */
 export const MAX_TRANSACTION_BYTES = 1232
@@ -109,6 +113,20 @@ export interface BuiltCleanupTransactions {
   lastValidBlockHeight: number
 }
 
+/** Throws if any token account appears in more than one batch (or twice in one). */
+export function assertUniqueAccounts(quote: CleanupQuote): void {
+  const seen = new Map<string, number>()
+  for (const batch of quote.batches) {
+    for (const account of batch.accounts) {
+      const first = seen.get(account.address)
+      if (first !== undefined) {
+        throw new Error(`Account ${account.address} appears in batch ${first} and batch ${batch.index}`)
+      }
+      seen.set(account.address, batch.index)
+    }
+  }
+}
+
 /** One v0 transaction per quote batch, sharing a fresh blockhash, fee payer = owner. */
 export async function buildCleanupTransactions(params: {
   connection: Connection
@@ -118,6 +136,7 @@ export async function buildCleanupTransactions(params: {
 }): Promise<BuiltCleanupTransactions> {
   const { connection, owner, quote, fee } = params
   // Build instructions first so invalid input fails before any RPC call.
+  assertUniqueAccounts(quote)
   const instructionSets = quote.batches.map((batch) => buildBatchInstructions(owner, batch, fee))
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
 
@@ -143,6 +162,29 @@ export async function buildCleanupTransactions(params: {
   return { transactions, blockhash, lastValidBlockHeight }
 }
 
+/**
+ * Same message with a different recent blockhash (unsigned). Everything else —
+ * keys, header, instructions — is copied verbatim, so a tx that passed
+ * assertSafeCleanupTransaction and simulation stays equivalent.
+ */
+export function withBlockhash(tx: VersionedTransaction, blockhash: string): VersionedTransaction {
+  const m = tx.message
+  if (m.version !== 0 || m.addressTableLookups.length > 0) throw new Error('expected a v0 message without lookup tables')
+  return new VersionedTransaction(
+    new MessageV0({
+      header: { ...m.header },
+      staticAccountKeys: [...m.staticAccountKeys],
+      recentBlockhash: blockhash,
+      compiledInstructions: m.compiledInstructions.map((ix) => ({
+        programIdIndex: ix.programIdIndex,
+        accountKeyIndexes: [...ix.accountKeyIndexes],
+        data: Uint8Array.from(ix.data),
+      })),
+      addressTableLookups: [],
+    }),
+  )
+}
+
 function readU32LE(data: Uint8Array, offset: number): number {
   return new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(offset, true)
 }
@@ -160,7 +202,9 @@ function readU64LE(data: Uint8Array, offset: number): bigint {
  * Also bounds the network fee: the compute-unit limit may not exceed
  * `batch.computeUnitLimit` and the price may not exceed
  * `fee.priorityFeeMicroLamports`, so the priority fee can never exceed what
- * the quote displayed.
+ * the quote displayed. The batch's own numbers (reclaim, service fee, CU
+ * limit, network fee) are re-derived from its accounts and `fee`, and the
+ * service fee is independently capped at 10% and at the reclaim.
  */
 export function assertSafeCleanupTransaction(
   tx: VersionedTransaction,
@@ -181,9 +225,23 @@ export function assertSafeCleanupTransaction(
   if (!Number.isSafeInteger(batch.serviceFeeLamports) || batch.serviceFeeLamports < 0) {
     fail(`invalid service fee ${batch.serviceFeeLamports}`)
   }
-  const expectedFee = serviceFeeFor(batch.reclaimLamports, fee)
+  if (!Number.isInteger(fee.serviceFeeBps) || fee.serviceFeeBps < 0 || fee.serviceFeeBps > MAX_SERVICE_FEE_BPS) {
+    fail(`service fee rate ${fee.serviceFeeBps} bps is outside 0–${MAX_SERVICE_FEE_BPS}`)
+  }
+  const expectedFee = serviceFeeFor(feeBasisFor(batch.accounts), fee)
   if (batch.serviceFeeLamports !== expectedFee) {
     fail(`batch service fee ${batch.serviceFeeLamports} != ${expectedFee} computed from the fee config`)
+  }
+  if (batch.serviceFeeLamports > batch.reclaimLamports) {
+    fail(`service fee ${batch.serviceFeeLamports} exceeds the reclaim ${batch.reclaimLamports}`)
+  }
+  const expectedLimit = computeUnitLimitFor(batch.accounts.length, fee)
+  if (batch.computeUnitLimit !== expectedLimit) {
+    fail(`batch compute unit limit ${batch.computeUnitLimit} != ${expectedLimit} computed from the fee config`)
+  }
+  const expectedNetworkFee = networkFeeFor(batch.computeUnitLimit, fee)
+  if (batch.networkFeeLamports !== expectedNetworkFee) {
+    fail(`batch network fee ${batch.networkFeeLamports} != ${expectedNetworkFee} computed from the fee config`)
   }
   const expected = new Map<string, TokenAccountInfo>()
   for (const a of batch.accounts) {

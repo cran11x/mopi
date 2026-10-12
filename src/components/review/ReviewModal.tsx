@@ -133,12 +133,26 @@ function ReviewStep() {
       )
       blockerNote = 'Select at least one eligible account first.'
       break
-    default:
+    case 'stale-scan':
+      action = (
+        <Button variant="primary" onClick={() => void runScan(scan.owner)} iconLeft="refresh">
+          Rescan wallet
+        </Button>
+      )
+      blockerNote = 'These results are from another network or are still refreshing. Rescan before approving.'
+      break
+    case null:
       action = (
         <Button variant="primary" onClick={() => void startCleanup()} iconRight="arrow-right">
           Approve in wallet
         </Button>
       )
+      break
+    default: {
+      // Compile-time exhaustiveness: a new blocker must get its own case.
+      const unhandled: never = executeBlocker
+      throw new Error(`Unhandled execute blocker: ${String(unhandled)}`)
+    }
   }
 
   return (

@@ -14,10 +14,45 @@ export function defaultFeeConfig(isHolder: boolean): FeeConfig {
   }
 }
 
-/** Service fee for one batch: floor(reclaim * bps / 10_000); 0 without a fee wallet. */
-export function serviceFeeFor(reclaimLamports: number, fee: FeeConfig): number {
-  if (!fee.feeWallet || fee.serviceFeeBps <= 0 || reclaimLamports <= 0) return 0
-  return Math.floor((reclaimLamports * fee.serviceFeeBps) / 10_000)
+/** Service fee for one batch: floor(feeBasis * bps / 10_000); 0 without a fee wallet. */
+export function serviceFeeFor(feeBasisLamports: number, fee: FeeConfig): number {
+  if (!fee.feeWallet || fee.serviceFeeBps <= 0 || feeBasisLamports <= 0) return 0
+  return Math.floor((feeBasisLamports * fee.serviceFeeBps) / 10_000)
+}
+
+/** Rent-exempt minimum for an account with `dataLen` bytes of data (128-byte header, 3480 lamports/byte-year, 2 years). */
+export function rentExemptMinimum(dataLen: number): number {
+  return (128 + dataLen) * 3_480 * 2
+}
+
+/** An SPL Token account is always exactly 165 bytes. */
+export const SPL_TOKEN_ACCOUNT_SPACE = 165
+/**
+ * Largest Token-2022 account mopi will close: 165-byte base + 1-byte account
+ * type + a TLV entry (4-byte header + value) for every allowlisted account
+ * extension: immutableOwner 0, transferFeeAmount 8, memoTransfer 1, cpiGuard 1,
+ * nonTransferableAccount 0, transferHookAccount 1, pausableAccount 0.
+ */
+export const MAX_TOKEN_2022_ACCOUNT_SPACE = 165 + 1 + 7 * 4 + 8 + 1 + 1 + 1
+
+/**
+ * The most account SOL a closable token account can hold without someone
+ * having donated SOL to it: its rent-exempt deposit at the largest size mopi
+ * accepts for its program.
+ */
+export function maxRentDepositFor(account: Pick<TokenAccountInfo, 'program'>): number {
+  return rentExemptMinimum(account.program === 'token-2022' ? MAX_TOKEN_2022_ACCOUNT_SPACE : SPL_TOKEN_ACCOUNT_SPACE)
+}
+
+/**
+ * Lamports of `accounts` the service fee is charged on. Each account counts at
+ * most its plausible rent deposit, so an RPC that over-reports `lamports` can
+ * never make the fee exceed what the closes actually return (fee ≤ 10% of a
+ * deposit that is really there). SOL donated on top of the deposit still goes
+ * back to the owner — it just isn't charged.
+ */
+export function feeBasisFor(accounts: readonly TokenAccountInfo[]): number {
+  return accounts.reduce((sum, a) => sum + Math.max(0, Math.min(a.lamports, maxRentDepositFor(a))), 0)
 }
 
 export function computeUnitLimitFor(closeCount: number, fee: FeeConfig): number {
@@ -37,14 +72,23 @@ export function networkFeeFor(computeUnitLimit: number, fee: FeeConfig): number 
  * Splits the selected (eligible) accounts into transaction-sized batches and
  * prices them. Pure — the same quote drives the preview card, the review
  * modal and the transaction builder, so what the user sees is what they sign.
- * Accounts that are not `eligible` are ignored defensively.
+ * Accounts that are not `eligible`, and repeated addresses, are ignored
+ * defensively. The service fee is charged on `feeBasisFor` (capped per
+ * account), not on the raw reported lamports.
  */
 export function buildQuote(
   accounts: TokenAccountInfo[],
   fee: FeeConfig,
   opts: { isHolderRate?: boolean } = {},
 ): CleanupQuote {
-  const closable = accounts.filter((a) => a.status === 'eligible')
+  // Eligible only, and each address once: a duplicate would be quoted twice
+  // but can only be closed once.
+  const seen = new Set<string>()
+  const closable = accounts.filter((a) => {
+    if (a.status !== 'eligible' || seen.has(a.address)) return false
+    seen.add(a.address)
+    return true
+  })
   const size = Math.max(1, Math.floor(fee.maxClosesPerTx))
   const batches: CleanupBatch[] = []
 
@@ -56,7 +100,7 @@ export function buildQuote(
       index: batches.length,
       accounts: slice,
       reclaimLamports,
-      serviceFeeLamports: serviceFeeFor(reclaimLamports, fee),
+      serviceFeeLamports: serviceFeeFor(feeBasisFor(slice), fee),
       networkFeeLamports: networkFeeFor(computeUnitLimit, fee),
       computeUnitLimit,
     })

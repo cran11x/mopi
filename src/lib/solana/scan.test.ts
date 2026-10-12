@@ -1,8 +1,13 @@
-import { PublicKey, type Connection } from '@solana/web3.js'
+// @vitest-environment node
+// (real web3.js Connection tests below need Node's fetch Response and Uint8Array realm.)
+import { Connection, Keypair, PublicKey } from '@solana/web3.js'
 import { describe, expect, it, vi } from 'vitest'
 import { scanWallet } from './scan'
+import { checkHolderStatus } from './holder'
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from './programs'
 import { RENT, SPL, T22, parsedData, randomAddress, randomKey } from '../../test/solanaFixtures'
+
+const addr = () => Keypair.generate().publicKey.toBase58()
 
 type Entry = { pubkey: PublicKey; account: { lamports: number; owner: PublicKey; data: unknown; executable: boolean; rentEpoch: number } }
 
@@ -146,5 +151,262 @@ describe('scanWallet', () => {
     await expect(scanWallet(connection, ownerKey, { cluster: 'devnet', signal: ac.signal })).rejects.toMatchObject({
       name: 'AbortError',
     })
+  })
+})
+
+// ── Real web3.js Connection (stubbed fetch) with byte-for-byte realistic jsonParsed responses ──
+// Proves web3.js's superstruct validation accepts the shapes Agave's solana-account-decoder emits
+// and that toRaw/classify map the real field names/types (owner as PublicKey, withheldAmount as a
+// JSON number, rentEpoch u64::MAX, native rentExemptReserve…).
+
+type RpcCall = { method: string; params: unknown[] }
+
+function connectionWith(handler: (call: RpcCall) => unknown, calls: RpcCall[] = []): Connection {
+  const fetchStub = async (_url: unknown, init?: { body?: unknown }) => {
+    const req = JSON.parse(String(init?.body)) as { id: string; method: string; params: unknown[] }
+    calls.push({ method: req.method, params: req.params })
+    const result = handler({ method: req.method, params: req.params })
+    // Write u64::MAX rentEpoch literally, as the real RPC does.
+    const body = JSON.stringify({ jsonrpc: '2.0', id: req.id, result }).replace(/"__U64MAX__"/g, '18446744073709551615')
+    return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+  return new Connection('http://127.0.0.1:8899', { commitment: 'confirmed', fetch: fetchStub as unknown as typeof fetch })
+}
+
+function keyedAccount(pubkey: string, programOwner: string, lamports: number, data: unknown, space: number) {
+  return {
+    pubkey,
+    account: { data, executable: false, lamports, owner: programOwner, rentEpoch: '__U64MAX__', space },
+  }
+}
+
+function tokenInfo(owner: string, extra: Record<string, unknown> = {}) {
+  return {
+    isNative: false,
+    mint: addr(),
+    owner,
+    state: 'initialized',
+    tokenAmount: { amount: '0', decimals: 6, uiAmount: 0.0, uiAmountString: '0' },
+    ...extra,
+  }
+}
+
+describe('scanWallet against real web3.js response parsing', () => {
+  const owner = Keypair.generate().publicKey
+  const ownerB58 = owner.toBase58()
+
+  const splEmpty = addr()
+  const splNative = addr()
+  const splFull = addr()
+  const splDelegated = addr()
+  const t22Safe = addr()
+  const t22Withheld = addr()
+  const t22Confidential = addr()
+
+  const splAccounts = [
+    keyedAccount(splEmpty, SPL, 2_039_280, { program: 'spl-token', parsed: { type: 'account', info: tokenInfo(ownerB58) }, space: 165 }, 165),
+    keyedAccount(
+      splNative,
+      SPL,
+      2_039_280,
+      {
+        program: 'spl-token',
+        parsed: {
+          type: 'account',
+          info: {
+            isNative: true,
+            mint: 'So11111111111111111111111111111111111111112',
+            owner: ownerB58,
+            rentExemptReserve: { amount: '2039280', decimals: 9, uiAmount: 0.00203928, uiAmountString: '0.00203928' },
+            state: 'initialized',
+            tokenAmount: { amount: '0', decimals: 9, uiAmount: 0.0, uiAmountString: '0' },
+          },
+        },
+        space: 165,
+      },
+      165,
+    ),
+    keyedAccount(
+      splFull,
+      SPL,
+      2_039_280,
+      {
+        program: 'spl-token',
+        parsed: {
+          type: 'account',
+          info: tokenInfo(ownerB58, { tokenAmount: { amount: '1500000', decimals: 6, uiAmount: 1.5, uiAmountString: '1.5' } }),
+        },
+        space: 165,
+      },
+      165,
+    ),
+    // A delegate does not block CloseAccount (only amount / close authority do).
+    keyedAccount(
+      splDelegated,
+      SPL,
+      2_039_280,
+      {
+        program: 'spl-token',
+        parsed: {
+          type: 'account',
+          info: tokenInfo(ownerB58, {
+            delegate: addr(),
+            delegatedAmount: { amount: '5', decimals: 6, uiAmount: 0.000005, uiAmountString: '0.000005' },
+          }),
+        },
+        space: 165,
+      },
+      165,
+    ),
+  ]
+
+  const t22Accounts = [
+    keyedAccount(
+      t22Safe,
+      T22,
+      2_157_600,
+      {
+        program: 'spl-token-2022',
+        parsed: {
+          type: 'account',
+          info: tokenInfo(ownerB58, {
+            extensions: [
+              { extension: 'immutableOwner' },
+              { extension: 'transferFeeAmount', state: { withheldAmount: 0 } },
+              { extension: 'memoTransfer', state: { requireIncomingTransferMemos: true } },
+              { extension: 'cpiGuard', state: { lockCpi: true } },
+              { extension: 'transferHookAccount', state: { transferring: false } },
+            ],
+          }),
+        },
+        space: 182,
+      },
+      182,
+    ),
+    keyedAccount(
+      t22Withheld,
+      T22,
+      2_157_600,
+      {
+        program: 'spl-token-2022',
+        parsed: {
+          type: 'account',
+          info: tokenInfo(ownerB58, {
+            extensions: [{ extension: 'immutableOwner' }, { extension: 'transferFeeAmount', state: { withheldAmount: 42 } }],
+          }),
+        },
+        space: 182,
+      },
+      182,
+    ),
+    keyedAccount(
+      t22Confidential,
+      T22,
+      3_000_000,
+      {
+        program: 'spl-token-2022',
+        parsed: {
+          type: 'account',
+          info: tokenInfo(ownerB58, {
+            extensions: [{ extension: 'immutableOwner' }, { extension: 'confidentialTransferAccount', state: { approved: true } }],
+          }),
+        },
+        space: 465,
+      },
+      465,
+    ),
+  ]
+
+  it('sends the right requests and classifies realistic responses', async () => {
+    const calls: RpcCall[] = []
+    const conn = connectionWith(({ params }) => {
+      const filter = params[1] as { programId: string }
+      return { context: { slot: 1, apiVersion: '2.2.0' }, value: filter.programId === SPL ? splAccounts : t22Accounts }
+    }, calls)
+
+    const res = await scanWallet(conn, owner, { cluster: 'mainnet-beta' })
+
+    expect(calls.map((c) => c.method)).toEqual(['getTokenAccountsByOwner', 'getTokenAccountsByOwner'])
+    const programIds = calls.map((c) => (c.params[1] as { programId: string }).programId).sort()
+    expect(programIds).toEqual([SPL, T22].sort())
+    for (const c of calls) {
+      expect(c.params[0]).toBe(ownerB58)
+      expect(c.params[2]).toMatchObject({ encoding: 'jsonParsed', commitment: 'confirmed' })
+    }
+
+    const by = new Map(res.accounts.map((a) => [a.address, a]))
+    expect(by.get(splEmpty)).toMatchObject({ status: 'eligible', program: 'spl-token', programId: SPL, lamports: 2_039_280 })
+    expect(by.get(splNative)).toMatchObject({ status: 'eligible', isNative: true })
+    expect(by.get(splFull)).toMatchObject({ status: 'has-tokens', uiAmount: '1.5' })
+    expect(by.get(splDelegated)).toMatchObject({ status: 'eligible' })
+    expect(by.get(t22Safe)).toMatchObject({ status: 'eligible', program: 'token-2022', programId: T22 })
+    expect(by.get(t22Withheld)).toMatchObject({ status: 'unsupported', reason: 'withheld-fees' })
+    expect(by.get(t22Confidential)).toMatchObject({ status: 'unsupported', reason: 'extension' })
+    expect(res.eligible[0].address).toBe(t22Safe) // most account SOL first
+  })
+
+  it('known gap: a base64 fallback entry is rejected by web3.js itself, failing the whole program query', async () => {
+    // Agave's get_parsed_token_accounts filters out entries that fail to parse (e.g. token
+    // accounts whose mint was closed → no decimals → binary fallback), so a real Agave RPC never
+    // sends this; classify's Buffer branch is therefore unreachable through scanWallet, and those
+    // accounts are silently invisible. If a non-Agave provider did send it, the scan would fail.
+    const conn = connectionWith(({ params }) => {
+      const filter = params[1] as { programId: string }
+      const value = filter.programId === SPL ? [] : [keyedAccount(addr(), T22, 2_074_080, ['AAAA', 'base64'], 3)]
+      return { context: { slot: 1 }, value }
+    })
+    await expect(scanWallet(conn, owner, { cluster: 'mainnet-beta' })).rejects.toThrow(
+      /Could not read Token-2022 accounts: .*Expected an object/,
+    )
+  })
+
+  it('surfaces a real web3.js RPC error message (429) with the program label', async () => {
+    const fetchStub = async () =>
+      new Response(JSON.stringify({ jsonrpc: '2.0', id: '1', error: { code: 429, message: 'Too many requests for a specific RPC call' } }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    const conn = new Connection('http://127.0.0.1:8899', {
+      commitment: 'confirmed',
+      fetch: fetchStub as unknown as typeof fetch,
+      disableRetryOnRateLimit: true,
+    })
+    await expect(scanWallet(conn, owner, { cluster: 'mainnet-beta' })).rejects.toThrow(/Could not read (SPL Token|Token-2022) accounts: .*429/)
+  })
+})
+
+describe('holder balance against real web3.js parsing', () => {
+  it('uses the mint filter (RPC resolves the mint’s program, so Token-2022 mints are covered) and sums raw amounts', async () => {
+    const owner = Keypair.generate().publicKey
+    const ownerB58 = owner.toBase58()
+    const mint = addr()
+    const calls: RpcCall[] = []
+    const acct = (amount: string) =>
+      keyedAccount(
+        addr(),
+        T22,
+        2_157_600,
+        {
+          program: 'spl-token-2022',
+          parsed: {
+            type: 'account',
+            info: {
+              extensions: [{ extension: 'immutableOwner' }],
+              isNative: false,
+              mint,
+              owner: ownerB58,
+              state: 'initialized',
+              tokenAmount: { amount, decimals: 6, uiAmount: Number(amount) / 1e6, uiAmountString: String(Number(amount) / 1e6) },
+            },
+          },
+          space: 170,
+        },
+        170,
+      )
+    const conn = connectionWith(() => ({ context: { slot: 1 }, value: [acct('60000500000'), acct('39999600000')] }), calls)
+    const status = await checkHolderStatus(conn, owner, { mint, minRequired: 100_000 })
+    expect(calls[0].params[1]).toEqual({ mint })
+    // 60,000.5 + 39,999.6 = 100,000.1 → floored 100,000 → holder.
+    expect(status).toMatchObject({ checked: true, isHolder: true, balanceUi: 100_000 })
   })
 })

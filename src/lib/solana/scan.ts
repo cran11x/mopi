@@ -98,6 +98,12 @@ export function buildScanResult(
  * Reads every token account owned by `owner` under both the SPL Token and
  * Token-2022 programs (jsonParsed), classifies them, and returns them sorted
  * eligible → has-tokens → unsupported. Read-only; never signs anything.
+ *
+ * Known gap: Agave's jsonParsed getTokenAccountsByOwner silently drops token
+ * accounts it cannot parse — notably Token-2022 accounts whose mint was closed
+ * (MintCloseAuthority, only possible at supply 0, so they are all empty and
+ * closable). Those accounts never appear here and their rent stays where it
+ * is. Finding them needs a second base64 query and a raw-layout decoder.
  */
 export async function scanWallet(
   connection: Connection,
