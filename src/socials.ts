@@ -50,9 +50,12 @@ export function buildSocialLinks(env: { x?: string | null; telegram?: string | n
   return links
 }
 
-/** Configured social links, in display order. Empty when none are set. */
+/** Official mopi X profile, used when VITE_X_URL is not set. */
+export const DEFAULT_X_URL = 'https://x.com/MopiClean'
+
+/** Configured social links, in display order. */
 export const SOCIAL_LINKS: readonly SocialLink[] = buildSocialLinks({
-  x: readEnvUrl('VITE_X_URL', import.meta.env.VITE_X_URL),
+  x: readEnvUrl('VITE_X_URL', import.meta.env.VITE_X_URL) ?? DEFAULT_X_URL,
   telegram: readEnvUrl('VITE_TELEGRAM_URL', import.meta.env.VITE_TELEGRAM_URL),
 })
 

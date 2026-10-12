@@ -63,7 +63,7 @@ Everything is public and baked into the client bundle at build time: change a va
 | `VITE_HOLDER_FEE_BPS` | `200` | Service fee for $MOPI holders |
 | `VITE_MOPI_MINT` | _(empty)_ | $MOPI mint. Enables the holder check and shows the contract address (copy + Solscan) in the footer, the home holder banner and the Benefits page. |
 | `VITE_MOPI_HOLDER_MIN` | `100000` | Whole $MOPI tokens required for holder access |
-| `VITE_X_URL` | _(empty)_ | Official X profile, `https://` only. Empty (or invalid) hides the link in the header, mobile menu and footer. |
+| `VITE_X_URL` | `https://x.com/MopiClean` | Official X profile, `https://` only, shown in the header, mobile menu and footer. |
 | `VITE_TELEGRAM_URL` | _(empty)_ | Official Telegram link, `https://` only. Empty (or invalid) hides the link. |
 | `VITE_SITE_URL` | _(empty)_ | Public origin, e.g. `https://mopi.example`. Adds the canonical link, `og:url` and the absolute `og:image` share preview at build time. |
 
@@ -74,7 +74,7 @@ Everything is public and baked into the client bundle at build time: change a va
 1. **Own RPC.** Set `VITE_SOLANA_RPC_URL` to a paid provider endpoint that allows CORS from your domain. Optionally list a second provider in `VITE_SOLANA_RPC_FALLBACKS` (same cluster); otherwise there is no fallback once you set your own primary. The free public endpoint (`api.mainnet-beta.solana.com`) answers many website requests with **403 Access forbidden**, especially the Token-2022 query, so don't launch on it. Visitors can also paste their own endpoint under **network menu → Custom RPC…** (stored only in their browser), and a scan where one token program is refused still shows the other program's accounts with a "Partial scan" warning.
 2. **Funded fee wallet.** Set `VITE_FEE_WALLET` to a wallet you control and send it at least 0.001 SOL **before** launch. Without that, mopi blocks every approval with a "fee wallet unfunded" warning.
 3. **Domain.** Point your domain at the static host, set `VITE_SITE_URL=https://your.domain` (canonical link and share image), and keep the `vercel.json` security headers (or their equivalent on another host).
-4. **Socials.** Set `VITE_X_URL` (and `VITE_TELEGRAM_URL` if you have one), then rebuild and redeploy.
+4. **Socials.** The X link defaults to https://x.com/MopiClean; set `VITE_TELEGRAM_URL` if you have one, then rebuild and redeploy.
 5. **After the token launches:** set `VITE_MOPI_MINT` to the real mint, check `VITE_MOPI_HOLDER_MIN`, then rebuild and **redeploy**. The CA appears on the site only after the redeploy; double-check it against the mint on Solscan.
 6. **Wallet reputation.** Submit the domain for review so wallets don't flag it as unknown: Phantom (its domain review / allowlist request form) and Blowfish (the transaction-scanning service used by Phantom and other wallets). Expect a few days of lead time.
 7. **Smoke test on mainnet** with a small wallet: scan, review, approve one batch, and check on Solscan that the fee transfer and the returned SOL match the review.
