@@ -1,0 +1,137 @@
+/* ---------- Home page layout ---------- */
+
+.home {
+  padding-bottom: 16px;
+}
+
+.home__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Responsive copy swaps (one of each pair is display:none, so assistive tech
+   only ever reads the visible variant). */
+.home-wide {
+  display: inline;
+}
+.home-narrow {
+  display: none;
+}
+
+/* Main grid: the scan panel is one visual card (.home__panel) behind three
+   separate grid items, with the preview column beside it. */
+.home__main {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  grid-template-rows: auto auto auto 1fr;
+  grid-template-areas:
+    'form side'
+    'summary side'
+    'accounts side'
+    'pad side';
+  column-gap: 12px;
+}
+
+.home__panel {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.home__form {
+  grid-area: form;
+  padding: 24px 20px 0;
+}
+.home__summary {
+  grid-area: summary;
+  padding: 24px 20px 0;
+}
+.home__accounts {
+  grid-area: accounts;
+  padding: 16px 20px 20px;
+}
+
+.home__side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-self: start;
+  min-width: 0;
+}
+
+/* ---------- Tablet: panel full width, preview + explains side by side ---------- */
+@media (max-width: 1023px) {
+  .home__main {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      'form form'
+      'summary summary'
+      'accounts accounts'
+      'preview explains';
+    row-gap: 0;
+  }
+  .home__panel {
+    grid-column: 1 / -1;
+    grid-row: 1 / 4;
+  }
+  .home__side {
+    display: contents;
+  }
+  .home__preview {
+    grid-area: preview;
+    margin-top: 12px;
+  }
+  .home__explains {
+    grid-area: explains;
+    margin-top: 12px;
+  }
+}
+
+/* ---------- Phone: mockup order ---------- */
+@media (max-width: 720px) {
+  .home-wide {
+    display: none;
+  }
+  .home-narrow {
+    display: inline;
+  }
+
+  .home__stack {
+    gap: 12px;
+  }
+  .home__steps,
+  .home__how,
+  .home__holder {
+    display: none;
+  }
+
+  .home__main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'form'
+      'summary'
+      'preview'
+      'accounts'
+      'explains';
+    row-gap: 12px;
+  }
+  .home__panel {
+    display: none;
+  }
+  .home__form,
+  .home__summary,
+  .home__accounts {
+    padding: 0;
+  }
+  .home__preview,
+  .home__explains {
+    margin-top: 0;
+  }
+}

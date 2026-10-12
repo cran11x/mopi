@@ -1,0 +1,141 @@
+.scan-summary {
+  min-width: 0;
+}
+
+.scan-summary__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.scan-summary__title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.scan-summary__scope {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+}
+
+.scan-summary__tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scan-summary__tile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  height: 56px;
+  padding: 0 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-soft);
+}
+.scan-summary__tile--rose {
+  background: color-mix(in srgb, var(--rose-50) 80%, var(--surface));
+  border-color: color-mix(in srgb, var(--rose-200) 55%, var(--line));
+}
+
+.scan-summary__num {
+  flex: none;
+  min-width: 0.6em;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.scan-summary__tile--mint .scan-summary__num {
+  color: var(--forest);
+}
+.scan-summary__num--empty {
+  color: var(--ink-faint) !important;
+}
+.scan-summary__skel {
+  display: inline-block;
+  width: 36px;
+  height: 28px;
+  border-radius: var(--r-xs);
+  background: linear-gradient(90deg, var(--surface-muted), var(--line), var(--surface-muted));
+  background-size: 200% 100%;
+  animation: scan-summary-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes scan-summary-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.scan-summary__label {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--ink-2);
+}
+
+@media (max-width: 1023px) {
+  .scan-summary__tile {
+    gap: 12px;
+    padding: 0 14px;
+  }
+  .scan-summary__num {
+    font-size: 28px;
+  }
+  .scan-summary__label {
+    font-size: 13px;
+  }
+}
+
+/* ---------- Phone: compact tiles in one row ---------- */
+@media (max-width: 720px) {
+  .scan-summary__title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .scan-summary__head {
+    flex-wrap: nowrap;
+  }
+  .scan-summary__scope {
+    font-size: 11.5px;
+    text-align: right;
+  }
+  .scan-summary__tiles {
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .scan-summary__tile {
+    gap: 6px;
+    height: 48px;
+    padding: 0 8px;
+  }
+  .scan-summary__tile--rose {
+    background: var(--bg-soft);
+    border-color: var(--line);
+  }
+  .scan-summary__num {
+    font-size: 23px;
+  }
+  .scan-summary__label {
+    font-size: 11.5px;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

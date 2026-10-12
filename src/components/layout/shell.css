@@ -1,0 +1,51 @@
+/* App shell: skip link, main area, bottom-nav clearance. */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.app-main {
+  flex: 1;
+  min-width: 0;
+}
+.app-main:focus {
+  outline: none;
+}
+
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 200;
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+  background: var(--btn);
+  color: var(--btn-ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 0.15s ease;
+}
+.skip-link:focus {
+  transform: none;
+}
+
+/* Sections targeted by deep links clear the sticky header. */
+[id] {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    /* clearance for the fixed bottom tab bar */
+    padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Deep-link targets receive programmatic focus for screen readers; no ring needed. */
+[id][tabindex='-1']:focus {
+  outline: none;
+}

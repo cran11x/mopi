@@ -1,4 +1,4 @@
-import type { ReactNode, SVGProps } from 'react'
+import { useId, type ReactNode, type SVGProps } from 'react'
 
 // Stroke icon set (24px grid, 1.75 stroke) drawn for mopi. Add new glyphs here
 // rather than pulling in an icon library.
@@ -163,15 +163,17 @@ export function Icon({ name, size = 20, strokeWidth = 1.75, label, ...rest }: Ic
 
 /** Solana's three-bar mark in its gradient, for the network pill. */
 export function SolanaMark({ size = 16 }: { size?: number }) {
+  // Unique per instance: a shared id breaks when the first instance is display:none.
+  const gradId = `mopi-sol-grad-${useId().replace(/:/g, '')}`
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <defs>
-        <linearGradient id="mopi-sol-grad" x1="3" y1="20" x2="21" y2="4" gradientUnits="userSpaceOnUse">
+        <linearGradient id={gradId} x1="3" y1="20" x2="21" y2="4" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="#9945FF" />
           <stop offset="1" stopColor="#14F195" />
         </linearGradient>
       </defs>
-      <g fill="url(#mopi-sol-grad)">
+      <g fill={`url(#${gradId})`}>
         <path d="M6.2 16.2a.8.8 0 0 1 .56-.23H21l-3.2 3.2a.8.8 0 0 1-.56.23H3l3.2-3.2Z" />
         <path d="M6.2 4.83A.8.8 0 0 1 6.76 4.6H21l-3.2 3.2a.8.8 0 0 1-.56.23H3l3.2-3.2Z" />
         <path d="M17.8 10.5a.8.8 0 0 0-.56-.23H3l3.2 3.2a.8.8 0 0 0 .56.23H21l-3.2-3.2Z" />

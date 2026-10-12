@@ -1,0 +1,216 @@
+/* Header menus: network pill, account button, square mobile icon buttons. */
+
+.hmenu {
+  position: relative;
+  display: inline-flex;
+}
+
+/* ----- network pill (desktop) ----- */
+.netpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 12px 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.netpill:hover,
+.acct-btn:hover {
+  background: var(--surface-muted);
+}
+.netpill[aria-expanded='true'],
+.acct-btn[aria-expanded='true'] {
+  border-color: var(--ink-faint);
+}
+.netpill__chev {
+  color: var(--ink-muted);
+  transition: transform 0.15s ease;
+}
+[aria-expanded='true'] > .netpill__chev {
+  transform: rotate(180deg);
+}
+.netpill__dev {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--cream-200);
+  border: 1px solid var(--cream-300);
+  color: var(--cream-ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ----- account button (desktop, connected) ----- */
+.connect-btn {
+  height: 40px;
+  padding: 0 20px;
+  font-size: 15px;
+}
+.acct-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.acct-btn__icon {
+  border-radius: 5px;
+}
+.acct-btn__addr {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.acct-btn__holder {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ----- square icon buttons (mobile) ----- */
+.hicon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  transition: background-color 0.15s ease;
+}
+.hicon:hover {
+  background: var(--surface-muted);
+}
+.hicon--plain {
+  border-color: transparent;
+}
+.hicon__dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cream-ink);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.hicon__dot--on {
+  background: var(--mint-500);
+}
+
+/* ----- panel ----- */
+.hmenu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  min-width: 236px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: mopi-menu-in 0.12s ease;
+}
+@keyframes mopi-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.hmenu__heading {
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.hmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.hmenu__item:hover,
+.hmenu__item:focus-visible {
+  background: var(--mint-50);
+}
+.hmenu__item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.hmenu__item > svg {
+  flex: none;
+  color: var(--ink-2);
+}
+.hmenu__item--quiet {
+  color: var(--ink-muted);
+}
+.hmenu__text {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+}
+.hmenu__label {
+  font-weight: 600;
+}
+.hmenu__hint {
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+.hmenu__check {
+  margin-left: auto;
+  opacity: 0;
+  color: var(--forest);
+}
+.hmenu__check.is-on {
+  opacity: 1;
+}
+.hmenu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+.hmenu__account {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  padding: 10px 10px 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.hmenu__addr {
+  font-size: 14px;
+  color: var(--ink);
+}
+.hmenu__holder {
+  margin-top: 6px;
+}
