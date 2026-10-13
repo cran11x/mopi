@@ -3,445 +3,1013 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>mopi promo</title>
+<title>mopi launch film</title>
+<!-- Source of the mopi promo films. Deterministic: window.DURATION_MS + window.seek(ms) set the exact frame; render with a headless-browser frame grabber at 1080x1080, 1920x1080 or 1080x1920 (layout recomposes per aspect). -->
 <style>
-@font-face{font-family:Inter;src:url('../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2');font-weight:100 900}
-:root{--ink:#121a16;--forest:#2f5b45;--money:#2e6a4d;--mint1:#e4f2e9;--mint2:#cfe8d8;--mint3:#b3dac2;--mint4:#74b18c;--cream:#f5ebc9;--gold:#e8c468;--btn:#17201c;--muted:#4b5b53}
+@font-face{font-family:Inter;src:url(assets/inter-latin-wght-normal.woff2) format('woff2');font-weight:100 900;font-display:block}
+:root{--ink:#121a16;--ink2:#2b332f;--muted:#5b6560;--faint:#6b746f;--forest:#2f5b45;--money:#2e6a4d;--m50:#f1f8f3;--m1:#e4f2e9;--m2:#cfe8d8;--m3:#b3dac2;--m4:#74b18c;--cream:#f5ebc9;--creamink:#6d5a25;--gold:#e8c468;--btn:#17201c;--line:#e4e8e5;--line2:#d3d9d5;--soft:#f7f9f8;--smuted:#f4f7f5}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100vw;height:100vh;overflow:hidden;background:#fff;font-family:Inter,sans-serif;color:var(--ink)}
-#stage{position:absolute;left:0;top:0;width:1080px;height:1080px;overflow:hidden;background:#fff;transform-origin:0 0}
-#scene{position:absolute;left:0;top:0;width:1080px;height:1080px;overflow:visible}
-.abs{position:absolute;left:0;top:0;will-change:transform,opacity}
-#dots{position:absolute;inset:0;background-image:radial-gradient(#dfeee5 1.6px,transparent 1.8px);background-size:34px 34px;opacity:.75}
-#endbg{position:absolute;inset:0;background:radial-gradient(ellipse 70% 55% at 50% 38%,#e4f2e9 0%,#f3f9f5 55%,#ffffff 100%);opacity:0}
-#floor{position:absolute;left:-60px;top:930px;height:220px;border-radius:50%;background:radial-gradient(ellipse at 50% 30%,#eef7f1 0%,#f7fbf9 55%,rgba(255,255,255,0) 75%)}
-/* brand tag */
-#brand{display:flex;align-items:center;gap:12px;left:56px;top:40px}
-#brand img{width:62px;height:62px}
-#brand span{font-weight:820;font-size:42px;letter-spacing:-0.05em}
-/* captions */
-.cap{font-weight:830;font-size:88px;line-height:1.02;letter-spacing:-0.05em;white-space:nowrap}
-.cap .line{display:block}
-.cap .w{display:inline-block;will-change:transform,opacity}
-.cap .g{color:var(--forest)}
-.cap .sub{display:flex;align-items:center;gap:14px;margin-top:20px;font-weight:620;font-size:42px;letter-spacing:-0.025em;color:var(--muted);line-height:1.1}
-.cap .sub .ic{display:inline-flex;width:50px;height:50px;border-radius:50%;background:var(--mint1);border:2.5px solid var(--mint2);align-items:center;justify-content:center;flex:none}
-.land .cap{white-space:normal}
-/* folder blocks */
-.blk{width:170px;height:130px;transform-origin:50% 100%}
-.blk>svg{position:absolute;left:0;top:0;width:170px;height:130px;overflow:visible}
-.blk .zero{position:absolute;left:0;right:0;top:44px;text-align:center;font-weight:800;font-size:44px;letter-spacing:-0.04em;color:#c8b483}
-.chk{position:absolute;right:-14px;top:-4px;width:52px;height:52px;border-radius:50%;background:var(--mint4);box-shadow:0 0 0 4px #fff,0 6px 14px rgba(47,91,69,.25);display:flex;align-items:center;justify-content:center;transform:scale(0)}
-.gl{position:absolute;width:46px;height:46px;transform:scale(0)}
-.tag{position:absolute;white-space:nowrap;font-weight:680;font-size:38px;letter-spacing:-0.03em;background:#fff;border:2.5px solid #e6dcc0;border-radius:999px;padding:4px 20px 7px 16px;box-shadow:0 8px 18px rgba(18,26,22,.10);display:flex;align-items:center;gap:10px;transform-origin:50% 100%}
-.tag i{display:inline-block;width:14px;height:14px;border-radius:50%;background:#d9c79f}
-/* mopi */
-#mopi .crop{position:absolute;left:0;top:0;overflow:hidden}
-#mopi .crop img{position:absolute}
-/* sweep band */
-#band{left:0;top:420px;width:460px;height:720px;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 150px);mask-image:linear-gradient(to bottom,transparent 0,#000 150px)}
-#band .trail{position:absolute;left:0;top:0;width:440px;height:100%;background:linear-gradient(90deg,rgba(228,242,233,0) 0%,rgba(228,242,233,.85) 45%,#cfe8d8 88%,#b3dac2 100%)}
-#band .edge{position:absolute;left:432px;top:0;width:28px;height:100%;background:#b3dac2;border-radius:0 14px 14px 0;box-shadow:inset -7px 0 0 #74b18c}
-/* chip */
-#chip{display:flex;align-items:center;gap:16px;font-weight:700;font-size:42px;letter-spacing:-0.03em;background:#fff;border:3px solid var(--mint3);border-radius:999px;padding:12px 30px 14px 14px;box-shadow:0 10px 24px rgba(47,91,69,.14);white-space:nowrap;transform-origin:0 50%}
-#chip .dot{width:50px;height:50px;border-radius:50%;background:var(--mint4);display:flex;align-items:center;justify-content:center}
-#chip b{color:var(--money);font-weight:820}
-/* preview card */
-#card{left:478px;top:338px;width:584px;background:#fff;border:2.5px solid var(--mint2);border-radius:34px;box-shadow:0 30px 60px rgba(18,26,22,.16),0 4px 12px rgba(18,26,22,.06);padding:26px 28px 30px;transform-origin:85% 10%}
-#card .hd{display:flex;align-items:center;gap:12px;font-weight:760;font-size:36px;letter-spacing:-0.035em;color:var(--forest);margin-bottom:6px}
-#card .row{display:flex;justify-content:space-between;align-items:center;font-size:34px;letter-spacing:-0.025em;font-weight:540;padding:10px 0 11px;border-bottom:2px dashed #e3ece6;color:#3b4a43}
-#card .row b{font-weight:760;color:var(--ink);font-variant-numeric:tabular-nums}
-#card .pill{display:inline-block;padding:1px 12px 3px;border-radius:999px;background:var(--mint1);color:var(--forest);font-size:28px;font-weight:700;margin-left:10px;vertical-align:3px}
-#card .ret{padding-top:12px;display:flex;justify-content:space-between;align-items:baseline}
-#card .ret>span{font-weight:760;font-size:34px;letter-spacing:-0.03em}
-#card .ret b{font-weight:850;font-size:50px;letter-spacing:-0.05em;color:var(--money);font-variant-numeric:tabular-nums;white-space:nowrap}
-#card .ret b small{font-size:32px;font-weight:650;margin-left:8px;letter-spacing:-0.02em}
-#card .foot{font-size:30px;font-weight:500;color:#5d6d65;letter-spacing:-0.015em;margin-top:2px}
-#btn{margin-top:18px;height:88px;border-radius:24px;background:var(--btn);color:#fff;font-weight:760;font-size:38px;letter-spacing:-0.03em;position:relative;overflow:hidden}
-#btn .lbl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:14px}
-#ripple{position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.35);left:50%;top:50%;margin:-20px 0 0 -20px;transform:scale(0)}
-#tap{width:78px;height:78px;border-radius:50%;border:5px solid var(--mint4);background:rgba(116,177,140,.18)}
-/* wallet */
-#wallet{left:840px;top:286px;width:190px;height:150px;transform-origin:50% 60%}
-#counter{top:330px;left:0;width:822px;display:flex;justify-content:flex-end}
-#counter div{font-weight:850;font-size:56px;letter-spacing:-0.045em;color:var(--money);background:#fff;border:3px solid var(--mint3);border-radius:999px;padding:6px 30px 12px;box-shadow:0 12px 26px rgba(47,91,69,.14);white-space:nowrap;font-variant-numeric:tabular-nums;transform-origin:100% 50%}
-#counter div span{font-weight:700;color:var(--forest)}
-.coin{width:58px;height:58px}
-.spk{width:44px;height:44px}
-#swoosh{left:0;top:0;width:1080px;height:1080px;overflow:visible}
-/* end card */
-#endHead{left:0;top:488px;text-align:center;font-weight:850;font-size:100px;line-height:1.0;letter-spacing:-0.055em}
-#endHead .l{display:block}
-#endHead .g{color:var(--forest)}
-#endRow{left:0;top:752px;display:flex;justify-content:center;align-items:center;gap:30px}
-#logoCrop{position:relative;width:390px;height:124px;overflow:hidden}
-#logoCrop img{position:absolute;width:678px;left:-146px;top:-50px}
-#handle{font-weight:760;font-size:44px;letter-spacing:-0.035em;color:#fff;background:var(--btn);border-radius:999px;padding:14px 34px 18px;white-space:nowrap}
-#endSub{left:0;top:930px;text-align:center;font-weight:600;font-size:36px;letter-spacing:-0.02em;color:var(--muted)}
+html,body{width:100%;height:100%;overflow:hidden;background:#f7f9f8;font-family:Inter,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+#stage{position:absolute;left:0;top:0;overflow:hidden;background:#f7f9f8}
+.abs{position:absolute;left:0;top:0}
+.layer{position:absolute;left:0;top:0;width:100%;height:100%;isolation:isolate}
+#plane{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d}
+#cardsG{transform-style:flat}
+/* ---------- background ---------- */
+#bgBase{background:radial-gradient(120% 90% at 18% 8%,#e4f2e9 0%,rgba(228,242,233,0) 55%),radial-gradient(110% 90% at 90% 95%,#d6ecdf 0%,rgba(214,236,223,0) 60%),linear-gradient(180deg,#f9fbfa 0%,#f1f7f3 100%)}
+.blob{position:absolute;left:0;top:0;border-radius:50%}
+#endBg{background:radial-gradient(70% 60% at 50% 42%,#ffffff 0%,#f4faf6 45%,#e6f3ea 100%);opacity:0}
+#grain{background-image:url(assets/grain.png);background-size:160px 160px;opacity:.085;mix-blend-mode:multiply;pointer-events:none}
+#grade{background:radial-gradient(75% 70% at 55% 55%,rgba(47,91,69,0) 40%,rgba(47,91,69,.16) 100%),linear-gradient(180deg,rgba(47,91,69,0) 55%,rgba(47,91,69,.07) 100%);pointer-events:none}
+#fgCards{pointer-events:none}
+#vig{background:radial-gradient(85% 85% at 50% 45%,rgba(0,0,0,0) 58%,rgba(30,60,45,.13) 100%);pointer-events:none}
+/* ---------- account cards (hook/value) ---------- */
+.acard{position:absolute;left:0;top:0;width:470px;height:96px;border-radius:22px;background:#fff;border:1.5px solid #e1e6e3;box-shadow:0 26px 46px -18px rgba(22,52,36,.42),0 4px 10px rgba(22,52,36,.10);display:flex;align-items:center;padding:0 22px 0 20px;gap:16px;transform-origin:50% 50%}
+.acard .cb{width:28px;height:28px;border-radius:8px;background:#17201c;display:flex;align-items:center;justify-content:center;flex:none}
+.acard .idn{width:38px;height:38px;flex:none}
+.acard .nm{flex:1;min-width:0}
+.acard .nm b{display:block;font-size:24px;font-weight:650;letter-spacing:-0.02em;color:#121a16;line-height:1.15}
+.acard .nm i{display:block;font-style:normal;font-family:ui-monospace,Menlo,monospace;font-size:16px;color:#6b746f;margin-top:2px}
+.acard .rt{text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.acard .zt{font-size:17px;font-weight:650;color:#6d5a25;background:#f5ebc9;border-radius:999px;padding:2px 11px 3px;letter-spacing:-0.01em}
+.acard .sol{font-size:24px;font-weight:750;letter-spacing:-0.03em;color:#9aa49f;position:relative;white-space:nowrap}
+.acard .glow{position:absolute;inset:-10px -16px;border-radius:14px;background:radial-gradient(closest-side,rgba(232,196,104,.55),rgba(232,196,104,0));opacity:0}
+.acard .shine{position:absolute;inset:0;border-radius:22px;overflow:hidden;pointer-events:none}
+.acard .shine i{position:absolute;top:-20%;left:0;width:90px;height:140%;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.85),rgba(255,255,255,0));transform:skewX(-18deg)}
+#x24{position:absolute;left:-26px;top:-30px;font-size:30px;font-weight:850;letter-spacing:-0.04em;color:#fff;background:#2f5b45;border-radius:999px;padding:6px 16px 9px;box-shadow:0 10px 22px -8px rgba(47,91,69,.6);opacity:0}
+/* ---------- laptop / browser window ---------- */
+#lapWrap{transform-origin:0 0}
+#lap{position:absolute;left:0;top:0;width:1440px;height:944px;border-radius:18px;background:#fff;overflow:hidden;box-shadow:0 0 0 1px rgba(18,26,22,.10),0 80px 140px -50px rgba(20,48,34,.42),0 40px 70px -40px rgba(20,48,34,.30)}
+#lapShadow{position:absolute;left:0;top:0;width:1440px;height:120px;border-radius:50%;background:radial-gradient(closest-side,rgba(28,60,42,.30),rgba(28,60,42,0))}
+.tb{position:absolute;left:0;top:0;width:1440px;height:44px;background:linear-gradient(#f6f8f7,#eff3f1);border-bottom:1px solid #e1e6e3}
+.tb .tl{position:absolute;top:16px;width:13px;height:13px;border-radius:50%}
+.tb .addr{position:absolute;left:520px;top:8px;width:400px;height:28px;border-radius:8px;background:#e6ebe8;display:flex;align-items:center;justify-content:center;gap:7px;font-size:14px;font-weight:550;color:#2b332f;letter-spacing:-0.005em}
+.tb .nav{position:absolute;top:13px;left:100px;display:flex;gap:18px;opacity:.5}
+.dpage{position:absolute;left:0;top:44px;width:1440px;height:900px;background:#fff;overflow:hidden}
+.dpage img.hero{position:absolute;left:0;top:0;width:1440px;height:477px}
+.dcard{position:absolute;background:#fff;border:1px solid #e4e8e5;border-top:none;border-radius:0 0 14px 14px}
+.dfield{position:absolute;left:150px;top:479px;width:603px;height:46px;border:1px solid #d3d9d5;border-radius:10px;background:#fff;display:flex;align-items:center;padding:0 6px 0 5px}
+.dfield .lead{width:34px;height:34px;border-radius:8px;background:#f4f7f5;display:flex;align-items:center;justify-content:center}
+.dfield span{flex:1;padding-left:12px;font-size:15px;font-weight:500;color:#121a16}
+.dbtn{position:absolute;display:flex;align-items:center;justify-content:center;gap:8px;background:#17201c;color:#fff;font-weight:600;border-radius:10px;letter-spacing:-0.005em}
+.dmeta{position:absolute;left:152px;top:535px;font-size:12.5px;color:#5b6560}
+.dres{position:absolute;left:150px;top:572px;width:768px}
+.dres h4{font-size:16px;font-weight:700;letter-spacing:-0.015em;height:24px;line-height:24px}
+.dtiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.dtile{height:50px;border:1px solid #e4e8e5;border-radius:10px;background:#f7f9f8;display:flex;align-items:center;gap:16px;padding:0 20px}
+.dtile b{font-size:30px;font-weight:800;letter-spacing:-0.04em;line-height:1;min-width:36px;font-variant-numeric:tabular-nums}
+.dtile span{font-size:14px;color:#2b332f}
+.dtile.rose{background:#fdf6f5;border-color:#efdedb}
+.dtabs{display:flex;gap:10px;margin-top:9px}
+.dtab{height:30px;padding:0 20px;border-radius:9px 9px 0 0;border:1px solid #e4e8e5;border-bottom:none;font-size:13px;display:flex;align-items:center;color:#2b332f}
+.dtab.on{background:#e4f2e9;border-color:#b3dac2;color:#24503b;font-weight:600}
+.dtable{border:1px solid #e4e8e5;border-radius:0 10px 10px 10px;overflow:hidden}
+.dth{height:30px;background:#f7f9f8;display:flex;align-items:center;font-size:10.5px;letter-spacing:.12em;font-weight:600;color:#5b6560;border-bottom:1px solid #e4e8e5}
+.dtr{height:46px;display:flex;align-items:center;border-bottom:1px solid #eef1ef;font-size:13.5px}
+.dtr .c1,.dth .c1{width:46px;display:flex;justify-content:center}
+.dtr .c2,.dth .c2{width:274px;display:flex;align-items:center;gap:12px}
+.dtr .c3,.dth .c3{width:146px}
+.dtr .c4,.dth .c4{width:150px}
+.dtr .c2 b{display:block;font-weight:500;font-size:13.5px;color:#121a16}
+.dtr .c2 i{display:block;font-style:normal;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#6b746f}
+.pill{display:inline-block;background:#e4f2e9;color:#2f5b45;font-size:11.5px;font-weight:600;border-radius:999px;padding:3px 10px 4px}
+.chk{width:17px;height:17px;border-radius:4px;background:#17201c;display:flex;align-items:center;justify-content:center}
+.dprev{position:absolute;left:970px;top:477px;width:320px}
+.prow{display:flex;justify-content:space-between;align-items:center;height:32px;font-size:14.5px;color:#2b332f}
+.prow b{font-weight:700;color:#121a16;font-variant-numeric:tabular-nums}
+.prow em{font-style:normal;color:#2b332f}
+.ptot{display:flex;justify-content:space-between;align-items:center}
+.ptot span{font-size:15px;font-weight:700;color:#121a16}
+.ptot b{font-size:30px;font-weight:800;letter-spacing:-0.04em;color:#2e6a4d;font-variant-numeric:tabular-nums}
+#cursor{position:absolute;left:0;top:0;width:26px;height:34px}
+/* ---------- phone ---------- */
+#phoneWrap{transform-origin:0 0}
+#phone{position:absolute;left:0;top:0;width:422px;height:876px;border-radius:70px;background:linear-gradient(140deg,#eef1ef 0%,#b6bfba 16%,#f6f8f7 34%,#a2aca7 58%,#e6eae8 80%,#b3bcb7 100%);box-shadow:0 70px 110px -40px rgba(20,48,34,.45),0 34px 60px -30px rgba(20,48,34,.35),inset 0 0 0 1px rgba(255,255,255,.55),inset 0 0 0 2.5px rgba(120,132,126,.35)}
+#phone .bezel{position:absolute;left:5px;top:5px;right:5px;bottom:5px;border-radius:65px;background:#0b0f0d}
+#phone .btnS{position:absolute;width:4px;border-radius:2px;background:linear-gradient(90deg,#8d9792,#d9dfdc 60%,#9aa49f)}
+#screen{position:absolute;left:16px;top:16px;width:390px;height:844px;border-radius:54px;overflow:hidden;background:#fff;isolation:isolate}
+#scroller{position:absolute;left:0;top:54px;width:390px;height:1400px}
+#scroller img.mh{position:absolute;left:0;top:0;width:390px;height:426px}
+.sbar{position:absolute;left:0;top:0;width:390px;height:54px;background:#fff;z-index:3}
+.sbar .time{position:absolute;left:46px;top:17px;font-size:17px;font-weight:600;letter-spacing:-0.01em}
+.island{position:absolute;left:134px;top:11px;width:122px;height:36px;border-radius:20px;background:#000;z-index:9}
+.mnav{position:absolute;left:0;top:782px;width:390px;height:62px;z-index:4}
+.homeind{position:absolute;left:128px;top:831px;width:134px;height:5px;border-radius:3px;background:#121a16;z-index:9}
+.m{position:absolute}
+.mfield{left:16px;top:428px;width:358px;height:43px;border:1px solid #d3d9d5;border-radius:10px;display:flex;align-items:center;padding:0 10px 0 16px;font-size:15px;font-weight:500;background:#fff;z-index:1}
+.mfield span{flex:1}
+.mcard{left:16px;top:428px;width:358px;height:129px;border:1px solid #e4e8e5;border-radius:14px}
+.mbtn{display:flex;align-items:center;justify-content:center;gap:8px;background:#17201c;color:#fff;font-weight:600;border-radius:12px;font-size:15px;letter-spacing:-0.005em;overflow:hidden}
+.mtiles{left:16px;top:601px;width:358px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.mtile{height:48px;border:1px solid #e4e8e5;border-radius:10px;background:#f7f9f8;display:flex;align-items:center;gap:6px;padding:0 8px}
+.mtile b{font-size:23px;font-weight:800;letter-spacing:-0.04em}
+.mtile span{font-size:11.5px;color:#2b332f;white-space:nowrap}
+.mprev{left:16px;top:661px;width:358px;height:309px;border:1px solid #e4e8e5;border-radius:14px;padding:16px 16px 0;background:#fff}
+.mprev h5{font-size:18px;font-weight:800;letter-spacing:-0.035em;margin-top:6px}
+.mrow{display:flex;justify-content:space-between;align-items:center;height:30px;font-size:13.5px;color:#2b332f}
+.mrow b{font-weight:700;color:#121a16}
+.mtot{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+.mtot span{font-size:14px;font-weight:700}
+.mtot b{font-size:26px;font-weight:800;letter-spacing:-0.04em;color:#2e6a4d}
+.mtabs{left:16px;top:983px;width:358px;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.mtabs div{height:40px;border-radius:10px;border:1px solid #e4e8e5;display:flex;align-items:center;justify-content:center;font-size:14.5px;color:#2b332f}
+.mtabs div.on{background:#e4f2e9;border-color:#b3dac2;color:#24503b;font-weight:600}
+.mlist{left:16px;top:1070px;width:358px;border:1px solid #e4e8e5;border-radius:12px;overflow:hidden}
+.mli{height:56px;display:flex;align-items:center;gap:12px;padding:0 14px 0 12px;border-bottom:1px solid #e4e8e5}
+.mli .n{flex:1}.mli .n b{display:block;font-size:14px;font-weight:600}.mli .n i{display:block;font-style:normal;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#6b746f}
+.mli .r{text-align:right}.mli .r i{display:block;font-style:normal;font-size:12px;color:#5b6560}.mli .r b{display:block;font-size:14px;font-weight:600}
+#scrim{position:absolute;left:0;top:0;width:390px;height:844px;background:rgba(18,26,22,.34);z-index:5;opacity:0}
+#sheet{position:absolute;left:0;top:0;width:390px;height:900px;background:#fff;border-radius:26px 26px 0 0;z-index:6;box-shadow:0 -10px 40px rgba(18,26,22,.18);overflow:hidden}
+.sh-a,.sh-b{position:absolute;left:0;top:0;width:390px}
+.sh-a h3,.sh-b h3{position:absolute;left:16px;top:22px;font-size:22px;font-weight:800;letter-spacing:-0.035em}
+.sh-x{position:absolute;right:20px;top:26px}
+.sbox{position:absolute;left:16px;top:72px;width:358px;height:190px;border:1px solid #e4e8e5;border-radius:14px;background:#f7f9f8;padding:12px 16px}
+.srow{display:flex;justify-content:space-between;align-items:center;height:27px;font-size:14.5px;color:#2b332f}
+.srow b{font-weight:600;color:#121a16}
+.stot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #d3d9d5;margin-top:10px;padding-top:12px}
+.stot span{font-size:14.5px;font-weight:700}.stot b{font-size:25px;font-weight:800;letter-spacing:-0.04em;color:#2e6a4d}
+.snote{position:absolute;left:16px;top:274px;width:358px;font-size:12.5px;color:#5b6560;line-height:1.5}
+.ssign{position:absolute;left:16px;top:318px;font-size:11.5px;font-weight:600;letter-spacing:.14em;color:#5b6560}
+.sli{position:absolute;left:16px;width:350px;display:flex;gap:12px;align-items:flex-start;font-size:14.5px;line-height:1.4;color:#121a16}
+.sli .ic{width:24px;height:24px;border-radius:50%;background:#e4f2e9;flex:none;display:flex;align-items:center;justify-content:center;margin-top:-1px}
+.sfoot{position:absolute;left:0;width:390px;height:140px;background:#fff;border-top:1px solid #e4e8e5}
+.sbtn2{display:flex;align-items:center;justify-content:center;border:1px solid #d3d9d5;border-radius:12px;font-size:15px;font-weight:600;color:#121a16;background:#fff}
+#ripple,.ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.35);pointer-events:none}
+#touch{position:absolute;left:0;top:0;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.55);border:2px solid rgba(255,255,255,.9);box-shadow:0 4px 14px rgba(18,26,22,.35),inset 0 0 0 1px rgba(18,26,22,.12);z-index:12}
+#touchRing{position:absolute;left:0;top:0;width:46px;height:46px;border-radius:50%;border:3px solid rgba(255,255,255,.9);z-index:12}
+#glare{position:absolute;left:0;top:0;width:390px;height:844px;z-index:11;pointer-events:none;background:linear-gradient(118deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,0) 30%,rgba(255,255,255,0) 70%,rgba(255,255,255,.06) 100%)}
+.sweep{position:absolute;top:-30%;left:0;width:150px;height:160%;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.55),rgba(255,255,255,0));transform-origin:0 0;pointer-events:none}
+#phoneShadow{position:absolute;left:0;top:0;width:500px;height:90px;border-radius:50%;background:radial-gradient(closest-side,rgba(28,60,42,.34),rgba(28,60,42,0))}
+/* ---------- mascot ---------- */
+.masc{position:absolute;left:0;top:0;transform-origin:50% 100%}
+/* ---------- type ---------- */
+.kt{position:absolute;left:0;top:0;font-weight:830;letter-spacing:-0.05em;line-height:1.0;color:var(--ink)}
+.kt .ln{display:block;overflow:hidden;white-space:nowrap;padding:0.06em 0.06em 0.14em 0.02em;margin:-0.06em -0.06em -0.14em -0.02em}
+.kt .w{display:inline-block;position:relative;z-index:0;transform-origin:0 100%}
+.kt .g{color:var(--forest)}
+.kt .hlbar{position:absolute;left:-0.08em;right:-0.06em;bottom:0.04em;height:0.42em;background:#b3dac2;border-radius:0.08em;z-index:-1;transform-origin:0 50%;transform:scaleX(0)}
+.badge{position:absolute;left:0;top:0;display:flex;align-items:center;gap:22px;padding:20px 34px 22px 20px;border-radius:999px;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 0 0 1px rgba(47,91,69,.10),0 24px 48px -20px rgba(28,58,42,.30),inset 0 1px 0 rgba(255,255,255,.9);white-space:nowrap;overflow:hidden;transform-origin:0 0}
+.badge .ic{width:64px;height:64px;border-radius:50%;background:linear-gradient(160deg,#e4f2e9,#cfe8d8);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:inset 0 0 0 1.5px #b3dac2}
+.badge span{font-size:38px;font-weight:780;letter-spacing:-0.035em;color:#121a16}
+.badge span em{font-style:normal;color:var(--forest)}
+.badge .bs{position:absolute;top:-20%;left:0;width:120px;height:140%;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.9),rgba(255,255,255,0));transform:skewX(-20deg)}
+.coin{position:absolute;left:0;top:0;width:56px;height:56px}
+.spk{position:absolute;left:0;top:0;width:40px;height:40px}
+/* value coin + pill */
+#vCoin{position:absolute;left:0;top:0;width:112px;height:112px}
+#vCoin svg{width:100%;height:100%;display:block}
+#vPill{position:absolute;left:0;top:0;font-size:38px;font-weight:800;letter-spacing:-0.035em;color:#2e6a4d;background:#fff;border-radius:999px;padding:12px 26px 15px;box-shadow:0 0 0 1.5px #b3dac2,0 20px 40px -18px rgba(28,58,42,.45);white-space:nowrap;transform-origin:100% 50%}
+/* done screen + iris (inside phone) */
+#done{position:absolute;left:0;top:54px;width:390px;height:790px;background:#fff;z-index:7}
+#done h3{position:absolute;left:20px;top:24px;font-size:22px;font-weight:800;letter-spacing:-0.035em}
+#irisRing{position:absolute;left:0;top:0;border-radius:50%;border:6px solid #b3dac2;z-index:8;pointer-events:none;box-shadow:0 0 0 3px rgba(255,255,255,.8),0 0 30px rgba(116,177,140,.5)}
+/* payoff hero number */
+#num{position:absolute;left:0;top:0;white-space:nowrap}
+#num .l1{display:block;overflow:hidden;padding:0.04em 0.06em 0.12em 0.02em;margin:-0.04em -0.06em -0.12em -0.02em}
+#num .l1 span{display:inline-block;font-weight:850;letter-spacing:-0.05em;line-height:1;color:var(--money);font-variant-numeric:tabular-nums}
+#num .l1 span i{font-style:normal;color:var(--forest);font-weight:800;font-size:.62em;letter-spacing:-0.03em;margin-left:.12em}
+#num .l2{display:flex;align-items:center;overflow:hidden;padding:0.1em 0 0.16em;margin-top:0.02em}
+#num .l2 .in{display:flex;align-items:center;gap:0.35em}
+#num .l2 b{font-weight:760;letter-spacing:-0.035em;color:var(--ink2)}
+#num .wal{width:1.5em;height:1.5em;border-radius:50%;background:#2f5b45;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 10px 24px -10px rgba(47,91,69,.7)}
+#num .wal svg{width:62%;height:62%}
+/* ---------- end ---------- */
+#rays{position:absolute;left:0;top:0;border-radius:50%;background:repeating-conic-gradient(from 0deg,rgba(179,218,194,.34) 0deg 7deg,rgba(179,218,194,0) 7deg 18deg);-webkit-mask-image:radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 25%,transparent 62%);mask-image:radial-gradient(circle,#000 0%,rgba(0,0,0,.6) 25%,transparent 62%)}
+#endRow{position:absolute;left:0;top:0;display:flex;align-items:center}
+#endRow .lg{position:relative;flex:none}
+#endRow .lg img{position:absolute;left:0;top:0;width:100%;height:100%}
+#endRow .lg img.sh{filter:brightness(1.9) saturate(.5)}
+#endHandle .hs{position:absolute;top:-10%;left:0;width:90px;height:120%;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.4),rgba(255,255,255,0));transform:skewX(-20deg)}
+#endG{background:radial-gradient(75% 65% at 50% 40%,#ffffff 0%,#f5faf7 50%,#e4f2e9 100%)}
+#endGlow{position:absolute;left:0;top:0;border-radius:50%;background:radial-gradient(closest-side,rgba(207,232,216,.95),rgba(207,232,216,0))}
+#endRing{position:absolute;left:0;top:0;border-radius:50%;border:8px solid #b3dac2;box-shadow:0 0 40px rgba(116,177,140,.35);pointer-events:none}
+#endHandle{position:relative;overflow:hidden;box-shadow:0 18px 34px -14px rgba(18,26,22,.45);font-weight:760;letter-spacing:-0.035em;color:#fff;background:#17201c;border-radius:999px;white-space:nowrap;display:flex;align-items:center;gap:14px}
+#endSub{position:absolute;left:0;top:0;font-weight:620;letter-spacing:-0.02em;color:#4b5b53;white-space:nowrap;display:flex;align-items:center;gap:0.4em}
+#endSub i{width:0.28em;height:0.28em;border-radius:50%;background:#74b18c;display:block}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute">
+  <filter id="mbA" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="0 0"/></filter>
+  <filter id="mbB" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="0 0"/></filter>
+  <filter id="mbC" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="0 0"/></filter>
+  <filter id="mbD" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="0 0"/></filter>
+  <filter id="mbF" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="0 0"/></filter>
+  <filter id="mbE" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="0 0"/></filter>
+</svg>
 <div id="stage">
-  <div id="dots"></div>
-  <div id="endbg"></div>
-  <div id="floor"></div>
+  <div id="bgBase" class="layer"></div>
+  <div id="blobs" class="layer"></div>
+  <div id="endBg" class="layer"></div>
 
-  <div id="scene">
-    <div id="band" class="abs"><div class="trail"></div><div class="edge"></div></div>
-    <div id="pile" class="abs"></div>
-    <div id="mopi" class="abs"><div class="crop"><img src="../../src/assets/mascot/hero.svg" alt=""></div></div>
-    <svg id="swoosh" class="abs" viewBox="0 0 1080 1080" width="1080" height="1080"><g fill="none" stroke-linecap="round"><path id="sw0" pathLength="100" stroke="#74b18c" stroke-width="12"/><path id="sw1" pathLength="100" stroke="#b3dac2" stroke-width="10"/><path id="sw2" pathLength="100" stroke="#e8c468" stroke-width="7"/></g><g id="dust"></g></svg>
-    <img id="happy" class="abs" src="../../src/assets/mascot/happy.svg" alt="">
+  <div id="cardsG" class="layer"></div>
+  <div id="grade" class="layer"></div>
+  <div id="fgCards" class="layer"></div>
+  <div id="scrim2" class="layer"></div>
+  <div id="valFX" class="layer"><div id="vPill">≈0.002 SOL</div><div id="vCoin"></div></div>
 
-    <div id="card" class="abs">
-      <div class="hd"><svg width="36" height="36" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#e4f2e9"/><path d="M6.5 12.4l3.6 3.6L17.6 8.4" fill="none" stroke="#2f5b45" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Every fee, shown first</div>
-      <div class="row" id="r1"><span>Account SOL detected</span><b id="v1">0.0489</b></div>
-      <div class="row" id="r2"><span>Est. network fee</span><b id="v2">−0.0001</b></div>
-      <div class="row" id="r3"><span>Service fee<span class="pill">4%</span></span><b id="v3">−0.0020</b></div>
-      <div class="ret" id="r4"><span>Estimated return</span><b><span id="v4">0.0468</span><small>SOL</small></b></div>
-      <div class="foot" id="r5">Demo · 24 accounts × ~0.002 SOL</div>
-      <div id="btn"><div id="ripple"></div><div class="lbl" id="lblA">Approve in wallet</div><div class="lbl" id="lblB"><svg width="40" height="40" viewBox="0 0 24 24"><path id="bchk" pathLength="1" d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 1"/></svg>Approved</div></div>
+  <div id="lapG" class="layer">
+    <div id="lapShadow"></div>
+    <div id="lapWrap" class="abs">
+      <div id="lap">
+        <div class="tb">
+          <div class="tl" style="left:20px;background:#ff5f57"></div><div class="tl" style="left:41px;background:#febc2e"></div><div class="tl" style="left:62px;background:#28c840"></div>
+          <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="#2b332f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><svg width="16" height="16" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="#2b332f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="addr"><svg width="12" height="12" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2.5" fill="#5b6560"/><path d="M8 10V7.5a4 4 0 018 0V10" fill="none" stroke="#5b6560" stroke-width="2.4"/></svg>mopi</div>
+        </div>
+        <div class="dpage" id="dpage">
+          <img class="hero" id="deskHero" alt="">
+          <div class="dcard" style="left:130px;top:477px;width:808px;height:430px"></div>
+          <div class="dcard" style="left:950px;top:477px;width:360px;height:296px"></div>
+          <div class="dfield"><div class="lead"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="#2b332f" stroke-width="2.2"/><path d="M16 16l4 4" stroke="#2b332f" stroke-width="2.2" stroke-linecap="round"/></svg></div><span>GmaD...AEGB</span><svg width="16" height="16" viewBox="0 0 24 24" style="margin-right:8px"><rect x="8" y="8" width="11" height="11" rx="2.5" fill="none" stroke="#5b6560" stroke-width="2"/><path d="M5 15V6.5A1.5 1.5 0 016.5 5H15" fill="none" stroke="#5b6560" stroke-width="2"/></svg></div>
+          <div class="dbtn" id="dScan" style="left:763px;top:479px;width:155px;height:46px;font-size:15px"><span id="dScanL">Scan wallet</span><svg id="dScanA" width="16" height="16" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><svg id="dSpin" width="16" height="16" viewBox="0 0 24 24" style="position:absolute;left:24px;opacity:0"><circle cx="12" cy="12" r="8" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="3"/><path d="M12 4a8 8 0 018 8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg></div>
+          <div class="dmeta">A scan is read-only.</div>
+          <div class="dres" id="dres">
+            <h4>Scan results</h4>
+            <div class="dtiles">
+              <div class="dtile"><b id="dN1" style="color:#2f5b45">24</b><span>eligible accounts</span></div>
+              <div class="dtile"><b id="dN2">6</b><span>accounts with tokens</span></div>
+              <div class="dtile rose"><b id="dN3">1</b><span>unsupported account</span></div>
+            </div>
+            <div class="dtabs"><div class="dtab on">Eligible (24)</div><div class="dtab">Skipped (7)</div></div>
+            <div class="dtable" id="dtable"><div class="dth"><div class="c1"><div class="chk"></div></div><div class="c2" style="padding-left:12px">ACCOUNT</div><div class="c3">TOKEN BALANCE</div><div class="c3">ACCOUNT SOL</div><div class="c4">STATUS</div></div></div>
+          </div>
+          <div class="dprev" id="dprev">
+            <div class="prow"><em>Account SOL detected</em><span><b id="dV1">0.0489</b> SOL</span></div>
+            <div class="prow"><em>Est. network fee</em><span><b id="dV2">−0.0001</b> SOL</span></div>
+            <div class="prow"><em>Service fee <span style="font-size:12.5px;color:#5b6560">(4%)</span></em><span><b id="dV3">−0.0020</b> SOL</span></div>
+            <div style="height:1px;background:#d3d9d5;margin:13px 0 17px"></div>
+            <div class="ptot"><span>Estimated return</span><b id="dV4">0.0468 SOL</b></div>
+            <div style="font-size:12.5px;color:#6b746f;margin-top:12px">Every fee is shown before you sign.</div>
+            <div class="dbtn" style="position:relative;margin-top:16px;height:52px;font-size:16px;border-radius:14px">Review 24 accounts <svg width="16" height="16" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div style="text-align:center;font-size:12.5px;color:#5b6560;margin-top:12px">Approval happens in your wallet.</div>
+          </div>
+          <svg id="cursor" viewBox="0 0 26 34"><path d="M3 2l0 25 6.2-6 4.2 9.6 4.4-1.9-4.2-9.4 8.8-.3z" fill="#121a16" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+          <div class="sweep" id="lapSweep"></div>
+        </div>
+      </div>
     </div>
-    <div id="tap" class="abs"></div>
-
-    <div id="wallet" class="abs"><svg viewBox="0 0 190 150" width="190" height="150">
-      <rect x="10" y="22" width="160" height="22" rx="10" fill="#b3dac2" transform="rotate(-8 90 33)"/>
-      <rect x="6" y="34" width="176" height="110" rx="24" fill="#2f5b45"/>
-      <rect x="6" y="34" width="176" height="30" rx="14" fill="#3d7357"/>
-      <rect x="118" y="70" width="70" height="46" rx="16" fill="#74b18c"/>
-      <circle cx="144" cy="93" r="9" fill="#f5ebc9"/>
-    </svg></div>
-    <div id="counter" class="abs"><div><b id="cval">+0.0000</b> <span>SOL back</span></div></div>
-
-    <div id="coins"></div>
-    <div id="sparks"></div>
   </div>
 
-  <div id="brand" class="abs"><img src="../../src/assets/mascot/head.svg" alt=""><span>mopi</span></div>
+  <img id="wave" class="masc" alt="">
+  <div id="phoneG" class="layer">
+    <div id="phoneShadow"></div>
+    <img id="peek" class="masc" alt="">
+    <div id="phoneWrap" class="abs">
+      <div id="phone">
+        <div class="btnS" style="left:-3px;top:150px;height:34px"></div>
+        <div class="btnS" style="left:-3px;top:212px;height:62px"></div>
+        <div class="btnS" style="left:-3px;top:288px;height:62px"></div>
+        <div class="btnS" style="right:-3px;top:248px;height:98px"></div>
+        <div class="bezel"></div>
+        <div id="screen">
+          <div id="scroller">
+            <img class="mh" id="mobHero" alt="">
+            <div class="m mcard"></div>
+            <div class="m mfield"><span>GmaD...AEGB</span><svg width="18" height="18" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2.5" fill="none" stroke="#5b6560" stroke-width="2"/><path d="M5 15V6.5A1.5 1.5 0 016.5 5H15" fill="none" stroke="#5b6560" stroke-width="2"/></svg></div>
+            <div class="m mbtn" style="left:16px;top:481px;width:358px;height:46px">Scan wallet <svg width="16" height="16" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="m" style="left:16px;top:534px;width:358px;text-align:center;font-size:12.5px;color:#5b6560">A scan is read-only.</div>
+            <div class="m" style="left:18px;top:571px;font-size:13px;font-weight:700;letter-spacing:-0.01em;color:#2b332f">Scan results</div>
+            <div class="m mtiles"><div class="mtile"><b style="color:#2f5b45">24</b><span>eligible</span></div><div class="mtile"><b>6</b><span>with tokens</span></div><div class="mtile"><b>1</b><span>unsupported</span></div></div>
+            <div class="m mprev">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;height:36px"><h5>Cleanup preview</h5><img id="mPrevHead" width="40" height="40" style="margin:-6px 0 0" alt=""></div>
+              <div style="padding-bottom:10px;border-bottom:1px solid #d3d9d5">
+                <div class="mrow"><span>Account SOL detected</span><span><b>0.0489</b> SOL</span></div>
+                <div class="mrow"><span>Est. network fee</span><span><b>−0.0001</b> SOL</span></div>
+                <div class="mrow"><span>Service fee <span style="font-size:12px;color:#5b6560">(4%)</span></span><span><b>−0.0020</b> SOL</span></div>
+              </div>
+              <div class="mtot"><span>Estimated return</span><b>0.0468 SOL</b></div>
+              <div style="font-size:12px;color:#6b746f;margin-top:4px">Every fee is shown before you sign.</div>
+              <div class="mbtn" id="mReview" style="position:relative;margin-top:12px;height:46px">Review accounts <svg width="16" height="16" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="ripple" id="rip1"></div></div>
+              <div style="text-align:center;font-size:12px;color:#5b6560;margin-top:9px">Approval happens in your wallet.</div>
+            </div>
+            <div class="m mtabs"><div class="on">Eligible (24)</div><div>Skipped (7)</div></div>
+            <div class="m" style="left:18px;top:1038px;width:354px;display:flex;justify-content:space-between;font-size:13px"><span style="color:#5b6560">24 of 24 selected</span><b style="font-weight:600">Clear all</b></div>
+            <div class="m mlist" id="mlist"></div>
+          </div>
+          <div class="sbar"><div class="time">9:41</div>
+            <svg style="position:absolute;left:290px;top:20px" width="72" height="14" viewBox="0 0 72 14"><rect x="0" y="9" width="3.2" height="4" rx="1" fill="#121a16"/><rect x="5" y="6.5" width="3.2" height="6.5" rx="1" fill="#121a16"/><rect x="10" y="4" width="3.2" height="9" rx="1" fill="#121a16"/><rect x="15" y="1.5" width="3.2" height="11.5" rx="1" fill="#121a16"/><path d="M28.5 4.8a9 9 0 0112 0M30.6 7.4a6 6 0 017.8 0M32.8 10a3 3 0 013.4 0" fill="none" stroke="#121a16" stroke-width="1.9" stroke-linecap="round"/><rect x="46" y="1.5" width="22" height="11" rx="3.3" fill="none" stroke="#121a16" stroke-opacity=".4" stroke-width="1"/><rect x="47.8" y="3.3" width="17" height="7.4" rx="2" fill="#121a16"/><path d="M69.6 5.5v3" stroke="#121a16" stroke-opacity=".45" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </div>
+          <img class="mnav" id="mobNav" alt="">
+          <div id="scrim"></div>
+          <div id="sheet">
+            <div class="sh-a" id="shA">
+              <h3>Review cleanup</h3>
+              <svg class="sh-x" width="18" height="18" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="#121a16" stroke-width="2.2" stroke-linecap="round"/></svg>
+              <div class="sbox">
+                <div class="srow"><span>Accounts to close</span><b>24</b></div>
+                <div class="srow"><span>Account SOL</span><b>0.0489 SOL</b></div>
+                <div class="srow"><span>Est. network fee</span><b>−0.0001 SOL</b></div>
+                <div class="srow"><span>Service fee (4%)</span><b>−0.0020 SOL</b></div>
+                <div class="stot"><span>Estimated return</span><b>0.0468 SOL</b></div>
+              </div>
+              <div class="snote">Your wallet shows the final network fee before you approve.</div>
+              <div class="ssign">WHAT YOU’LL SIGN</div>
+              <div class="sli" style="top:346px"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="#2f5b45" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Close 24 empty token accounts</div>
+              <div class="sli" style="top:380px"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3" fill="none" stroke="#2f5b45" stroke-width="2.4"/><path d="M15 12.5h3" stroke="#2f5b45" stroke-width="2.4" stroke-linecap="round"/></svg></div>Their account SOL returns to your wallet</div>
+              <div class="sli" style="top:414px"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z" fill="none" stroke="#2f5b45" stroke-width="2.4" stroke-linejoin="round"/><path d="M10 12h5M10 16h5" stroke="#2f5b45" stroke-width="2.2" stroke-linecap="round"/></svg></div>Service fee 0.0020 SOL (4%) to mopi</div>
+              <div class="sli" style="top:448px"><div class="ic"><svg width="13" height="13" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.6c0 4.6-3.2 8.3-7.5 9.9-4.3-1.6-7.5-5.3-7.5-9.9V6z" fill="none" stroke="#2f5b45" stroke-width="2.4" stroke-linejoin="round"/></svg></div>Nothing else — no token transfers, no approvals or delegations.</div>
+              <div class="sfoot" id="sfoot" style="top:652px">
+                <div class="mbtn" id="mApprove" style="position:absolute;left:16px;top:14px;width:358px;height:46px"><span id="apL" style="display:flex;align-items:center;gap:8px">Approve in wallet <svg width="16" height="16" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span id="apW" style="position:absolute;display:flex;align-items:center;gap:10px;opacity:0"><svg id="apSpin" width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="3"/><path d="M12 4a8 8 0 018 8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>Confirm in your wallet</span><div class="ripple" id="rip2"></div></div>
+                <div class="sbtn2" style="position:absolute;left:16px;top:70px;width:358px;height:44px">Cancel</div>
+              </div>
+            </div>
+          </div>
+          <div id="done">
+            <h3>Cleanup complete</h3>
+            <svg style="position:absolute;right:22px;top:30px" width="18" height="18" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="#121a16" stroke-width="2.2" stroke-linecap="round"/></svg>
+            <div id="uiAmt" style="position:absolute;left:20px;top:84px;width:350px;text-align:center;line-height:1.15"><div style="font-size:40px;font-weight:850;letter-spacing:-0.045em;color:#2e6a4d">0.0468 SOL</div><div style="font-size:22px;font-weight:760;letter-spacing:-0.03em;margin-top:6px">returned to your wallet</div></div>
+            <div style="position:absolute;left:20px;top:178px;width:350px;text-align:center;font-size:15px;color:#5b6560">24 empty accounts closed.</div>
+            <div style="position:absolute;left:40px;top:236px;width:310px;height:250px;border-radius:24px;background:radial-gradient(closest-side,#eef7f1,rgba(238,247,241,0))"></div>
+            <img id="uiHappy" style="position:absolute;left:95px;top:236px;width:200px;height:200px" alt="">
+            <div id="uiCheck" style="position:absolute;left:135px;top:276px;width:120px;height:120px;border-radius:50%;background:#e4f2e9;box-shadow:inset 0 0 0 2.5px #b3dac2;display:flex;align-items:center;justify-content:center;opacity:0"><svg width="66" height="66" viewBox="0 0 24 24"><path id="uiChkP" pathLength="1" stroke-dasharray="1 1" d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="#2f5b45" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div style="position:absolute;left:20px;top:502px;width:350px;text-align:center;font-size:13px;color:#5b6560">2 of 2 transactions confirmed.</div>
+            <div class="mbtn" style="position:absolute;left:16px;top:636px;width:358px;height:50px">Done</div>
+          </div>
+          <div id="irisRing"></div>
+          <div id="glare"></div>
+          <div class="sweep" id="phSweep" style="z-index:11"></div>
+          <div class="island"></div>
+          <div class="homeind"></div>
+          <div id="touchRing"></div>
+          <div id="touch"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  <div id="chip" class="abs"><span class="dot"><svg width="28" height="28" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>24 empty accounts · <b>≈0.0489 SOL</b> locked</span></div>
+  <div id="num"><span class="l1"><span id="numV">+0.0468<i>SOL</i></span></span><span class="l2"><span class="in"><b>to your wallet</b><span class="wal" id="numWal"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="13.5" rx="3.5" fill="#cfe8d8"/><rect x="4" y="3.6" width="13" height="4" rx="1.6" fill="#74b18c" transform="rotate(-6 10 5.6)"/><rect x="14.5" y="10.2" width="7" height="5.2" rx="2" fill="#74b18c"/><circle cx="17.4" cy="12.8" r="1.2" fill="#f5ebc9"/></svg></span></span></span></div>
 
-  <div id="cap1" class="abs cap"><span class="line"><span class="w">Empty</span> <span class="w">token</span> <span class="w">accounts</span></span><span class="line g"><span class="w">still</span> <span class="w">hold</span> <span class="w">SOL.</span></span></div>
-  <div id="cap2" class="abs cap"><span class="line"><span class="w">mopi</span> <span class="w g">finds</span> <span class="w g">them.</span></span><span class="sub"><span class="w ic"><svg width="28" height="28" viewBox="0 0 24 24"><path d="M12 2.8l7.4 2.9v5.6c0 4.6-3.1 8.4-7.4 9.9-4.3-1.5-7.4-5.3-7.4-9.9V5.7z" fill="#cfe8d8" stroke="#2f5b45" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.6 12.2l2.4 2.4 4.6-4.8" fill="none" stroke="#2f5b45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="w">Read-only. Nothing to sign.</span></span></div>
-  <div id="cap3" class="abs cap"><span class="line"><span class="w">You</span> <span class="w">approve.</span></span><span class="line g"><span class="w">SOL</span> <span class="w">comes</span> <span class="w">back.</span></span></div>
+  <div id="texts" class="layer">
+    <div id="tHook" class="kt"></div>
+    <div id="tValue" class="kt"></div>
+    <div id="tFind" class="kt"></div>
+    <div id="b1" class="badge"><div class="ic"><svg width="34" height="34" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="#2f5b45" stroke-width="2.4"/><path d="M15 15l5 5" stroke="#2f5b45" stroke-width="2.6" stroke-linecap="round"/></svg></div><span>Read-only <em>scan.</em></span><i class="bs"></i></div>
+    <div id="b2" class="badge"><div class="ic"><svg width="34" height="34" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" fill="none" stroke="#2f5b45" stroke-width="2.2" stroke-linejoin="round"/><path d="M9 8.5h6M9 12.5h6" stroke="#2f5b45" stroke-width="2.2" stroke-linecap="round"/></svg></div><span>Every fee <em>shown first.</em></span><i class="bs"></i></div>
+    <div id="b3" class="badge"><div class="ic"><svg width="34" height="34" viewBox="0 0 24 24"><path d="M12 2.8l7.4 2.9v5.6c0 4.6-3.1 8.4-7.4 9.9-4.3-1.5-7.4-5.3-7.4-9.9V5.7z" fill="none" stroke="#2f5b45" stroke-width="2.2" stroke-linejoin="round"/><path d="M8.6 12.2l2.4 2.4 4.6-4.8" fill="none" stroke="#2f5b45" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span>You approve <em>in your wallet.</em></span><i class="bs"></i></div>
+  </div>
 
-  <div id="endHead" class="abs"><span class="l">Clean up.</span><span class="l g">Get your SOL back.</span></div>
-  <div id="endRow" class="abs"><div id="logoCrop"><img src="../../brand/mopi-logo-transparent.png" alt="mopi"></div><div id="handle">@MopiClean</div></div>
-  <div id="endSub" class="abs">Fees shown first · You approve in your wallet</div>
+  <div id="endG" class="layer"><div id="endGlow"></div><div id="rays"></div>
+    <div id="tEnd" class="kt" style="text-align:center"></div>
+    <div id="endRow"><div class="lg" id="endLogo"><img id="logoImg" alt="mopi"><img id="logoSh" class="sh" alt=""></div><div id="endHandle"><svg id="xIcon" viewBox="0 0 24 24"><path d="M17.8 3h3.1l-6.8 7.8L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.3-8.3L2 3h6.4l4.4 5.8zm-1.1 16.2h1.7L7.4 4.7H5.6z" fill="#fff"/></svg><span>@MopiClean</span><i class="hs" id="hShine"></i></div></div>
+    <div id="endSub"><i></i>Scan any Solana wallet — free</div>
+  </div>
+  <img id="happy" class="masc" alt="">
+  <div id="coins" class="layer"></div>
+
+  <div id="endRing"></div>
+  <div id="sparks" class="layer"></div>
+  <div id="vig" class="layer"></div>
+  <div id="grain" class="layer"></div>
 </div>
-
+<script>window.ASSETS={"mobHero": "assets/mobile-hero.webp", "mobNav": "assets/mobile-tabbar.webp", "deskHero": "assets/desktop-hero.webp", "logo": "assets/mopi-lockup.png", "head": "../../src/assets/mascot/head.svg", "happy": "../../src/assets/mascot/happy.svg", "explain": "../../src/assets/mascot/explain.svg"};</script>
 <script>
-// ---------- deterministic helpers ----------
+'use strict';
+// ================= helpers (all motion is a pure function of ms) =================
 const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const seg=(t,a,b)=>clamp((t-a)/(b-a));
-const eOutC=t=>1-Math.pow(1-t,3);
-const eInC=t=>t*t*t;
-const eInOutC=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
-const eOutBack=(t,s=1.70158)=>{const c3=s+1;return 1+c3*Math.pow(t-1,3)+s*Math.pow(t-1,2)};
-const wob=(t,freq=3,decay=6)=>t<0?0:Math.exp(-decay*t)*Math.cos(2*Math.PI*freq*t);
-let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646};
+const eOutC=t=>1-Math.pow(1-t,3), eInC=t=>t*t*t, eInOutC=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const eOutQ=t=>1-Math.pow(1-t,5);
+const eOutX=t=>t>=1?1:1-Math.pow(2,-10*t);
+const eInOutX=t=>t<=0?0:t>=1?1:t<.5?Math.pow(2,20*t-10)/2:(2-Math.pow(2,-20*t+10))/2;
+const eInX=t=>t<=0?0:Math.pow(2,10*t-10);
+const eOutBack=(t,s=1.70158)=>{const c=s+1;return 1+c*Math.pow(t-1,3)+s*Math.pow(t-1,2)};
+const wob=(t,f=3,d=6)=>t<0?0:Math.exp(-d*t)*Math.cos(2*Math.PI*f*t);
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 const $=id=>document.getElementById(id);
-const S=(el,tx,ty,sx=1,sy=sx,rot=0,op=1)=>{el.style.transform=`translate(${tx}px,${ty}px) rotate(${rot}deg) scale(${sx},${sy})`;el.style.opacity=op};
+const tf=(el,x,y,s=1,r=0,o=1,sy)=>{el.style.transform=`translate(${x}px,${y}px) rotate(${r}deg) scale(${s},${sy===undefined?s:sy})`;el.style.opacity=o};
+// velocity of a scalar function (units per ms)
+const vel=(f,t)=>(f(t+8)-f(t-8))/16;
+function mblur(el,fid,sx,sy){const f=$(fid).firstElementChild;sx=Math.abs(sx);sy=Math.abs(sy);
+  if(sx<0.25&&sy<0.25){el.style.filter='none';return}
+  f.setAttribute('stdDeviation',`${sx.toFixed(2)} ${sy.toFixed(2)}`);el.style.filter=`url(#${fid})`}
 
-window.DURATION_MS=14600;
+window.DURATION_MS=15000;
 
-// ---------- responsive layout (design units: 1080 tall; width follows the viewport) ----------
-const VW=window.innerWidth||1080, VH=window.innerHeight||1080;
-const SC=Math.min(VW,VH)/1080, LW=VW/SC, LH=VH/SC;
-const LAND=LW/LH>1.3;
-const OX=LAND?LW-1080:(LW-1080)/2, OY=(LH-1080)/2;
-const stage=$('stage');stage.style.width=LW+'px';stage.style.height=LH+'px';stage.style.transform=`scale(${SC})`;
-if(LAND)stage.classList.add('land');
-$('scene').style.left=OX+'px';$('scene').style.top=OY+'px';
-$('floor').style.width=(LW+120)+'px';$('floor').style.top=(930+OY)+'px';
-['endHead','endRow','endSub'].forEach(id=>{$(id).style.width=LW+'px'});
-$('endHead').style.top=(488+OY)+'px';$('endRow').style.top=(752+OY)+'px';$('endSub').style.top=(930+OY)+'px';
-$('brand').style.top=(40+OY)+'px';
-const CAP={x:LAND?110:60, y:136+OY, w:LAND?Math.min(800,OX-40):null, cy:440+OY, fs:LAND?100:88};
-['cap1','cap2','cap3'].forEach(id=>{const el=$(id);el.style.left=CAP.x+'px';el.style.top=CAP.y+'px';el.style.fontSize=CAP.fs+'px';if(CAP.w)el.style.width=CAP.w+'px'});
-const CHIP=LAND?{x:OX+120,y:300+OY}:{x:CAP.x,y:330+OY};
-$('chip').style.left=CHIP.x+'px';$('chip').style.top=CHIP.y+'px';
-const ENDX=LW/2-OX; // end-card centre in scene coords
-
-// ---------- timeline (ms) ----------
+// ================= timeline (ms) — 120 BPM grid (500 ms) =================
 const T={
-  pileIn:[-350,800], tags:[700,1300], glint:[950,2700], cap1:[-200,2800],
-  pan:[1850,2750], mopiIn:[1900,3100], cap2:[2800,5600], scan:[3150,3950], chip:[3450,5600],
-  cap3:[5600,10650], card:[5650,6050], rows:[5750,6450], press:8000, walletIn:[8300,8550], cardOut:[8250,8600],
-  sweep:[8400,10200], endOut:[10450,10700], glide:[10350,10950], end:[10750,12050]
+  hookIn:-700, hookOut:3300,                // line 1 already set at t=0; 8 words: 3.3 s on screen
+  push:3300, valIn:3520, valOut:5790,       // 5 words: 2.27 s
+  wave:[4000,4500,5000], x24:4500, coinUp:3950, pill:4250, mascIn:4480,
+  whip:[5820,6170],
+  findIn:6050, findOut:7650,                // 3 words: 1.6 s
+  cur:[6100,6450], click:6500, spin:[6500,6850], results:6850,
+  lapPush:[6400,7450], lapBack:[7450,8100],
+  rise:[7500,8100],
+  b1:7700, b2:7950, b3:8200, bOut:10470,    // 3/4/5 words: 2.8/2.6/2.4 s
+  scroll:[7950,8400], phPush:[8400,8900],
+  tap1:8900, sheet:[8980,9300],
+  tap2:9600, wait:[9650,9850], iris:[9850,10250],
+  peek:[8450,9950],
+  pop:10600, num:10550, coins:[10750,11600],
+  exit:[12250,12700], endIn:12300,          // end headline from 12.38 s: 2.62 s
 };
+const COIN_ST=i=>T.coins[0]+i*55, COIN_DUR=450;
 
-// ---------- build folder pile ----------
-const folderSVG=`<svg viewBox="0 0 170 130"><path d="M8 18q0-10 10-10h40q6 0 10 6l6 8h78q10 0 10 10v86q0 10-10 10H18q-10 0-10-10z" fill="#e8d6a8" stroke="#d3bf8f" stroke-width="2.5"/><path d="M4 40q0-9 9-9h144q9 0 9 9v78q0 10-10 10H14q-10 0-10-10z" fill="#f5ebc9" stroke="#d9c79f" stroke-width="2.5"/><path d="M14 42h142" stroke="#fffaf0" stroke-width="5" stroke-linecap="round" opacity=".9"/></svg>`;
-const sparkSVG=(c,s=44)=>`<svg viewBox="0 0 44 44" width="${s}" height="${s}"><path d="M22 2q2.5 15.5 20 20q-17.5 4.5-20 20q-2.5-15.5-20-20q17.5-4.5 20-20z" fill="${c}"/></svg>`;
-const BL=[ // x,y (scene-1 position, top-left), rot, tag
-  {x:180,y:862,r:-4},{x:345,y:858,r:3},{x:510,y:864,r:-2,},{x:675,y:860,r:5},
-  {x:250,y:742,r:6},{x:420,y:740,r:-5,tag:'0 tokens',tx:-30,ty:-34,tr:-5},{x:590,y:744,r:3},{x:748,y:782,r:12},
-  {x:310,y:622,r:-7},{x:485,y:620,r:8},{x:645,y:652,r:-10,tag:'empty account',tx:-70,ty:-52,tr:5},
-  {x:400,y:505,r:4,tag:'empty account',tx:-60,ty:-62,tr:-4},
-];
-const GLINT_ORDER=[3,9,1,6,0,8,2,7]; // blocks that sparkle in scene 1
-const pile=$('pile');
-BL.forEach((b,i)=>{
-  const d=document.createElement('div');d.className='abs blk';d.innerHTML=folderSVG+`<div class="zero">0</div><div class="gl">${sparkSVG('#e8c468',46)}</div><div class="chk"><svg width="28" height="28" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`;
-  pile.appendChild(d);b.el=d;if(b.tag)d.style.zIndex=20;b.chk=d.querySelector('.chk');b.gl=d.querySelector('.gl');
-  b.gl.style.left=(28+rnd()*90)+'px';b.gl.style.top=(36+rnd()*40)+'px';
-  const gi=GLINT_ORDER.indexOf(i);b.gt=gi<0?null:T.glint[0]+gi*215;
-  b.delay=i*70+(i%3)*25; b.fx=650+rnd()*400; b.fvy=-(380+rnd()*420); b.frot=(120+rnd()*240)*(rnd()<.3?-1:1);
-  if(b.tag){const t=document.createElement('div');t.className='tag';t.innerHTML=`<i></i>${b.tag}`;t.style.left=b.tx+'px';t.style.top=b.ty+'px';d.appendChild(t);b.tagEl=t;b.dot=t.querySelector('i')}
-});
-// pile pan (scene-1 → scene-2 framing)
-const PAN=175, PSC0=1.12, PSC1=0.9;
-const PXf=(lx,psc,pan)=>549+(lx-549)*psc+pan, PYf=(ly,psc)=>990+(ly-990)*psc;
-// sweep band: leading edge x (scene coords), starts right of mopi's dustpan
-const W0=T.sweep[0]+60, W1=W0+2100;
-const BX=t=>{const u=seg(t,W0,W1);return lerp(470,1330,0.25*u*u*(3-2*u)+0.75*u)};
-BL.forEach(b=>{const cx=PXf(b.x+85,PSC1,PAN)-30;let lo=W0,hi=W1;for(let k=0;k<30;k++){const mid=(lo+hi)/2;if(BX(mid)>=cx)hi=mid;else lo=mid}b.st=hi});
-
-// ---------- coins (max ~3 airborne) & sparkles ----------
-const coinSVG=`<svg viewBox="0 0 58 58" width="58" height="58"><defs><radialGradient id="cg" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff3c4"/><stop offset=".45" stop-color="#ecc966"/><stop offset="1" stop-color="#c99a3a"/></radialGradient></defs><circle cx="29" cy="29" r="27" fill="url(#cg)" stroke="#b98a2e" stroke-width="2"/><circle cx="29" cy="29" r="19" fill="none" stroke="#fff6d6" stroke-width="3" opacity=".8"/><path d="M29 17l3 9 9 3-9 3-3 9-3-9-9-3 9-3z" fill="#fffbe9"/></svg>`;
-const COIN_DUR=330, COIN_GAP=112;
-const coins=[];
-// a block releases a coin the moment the band hits it, unless one launched <COIN_GAP ago (keeps <=3 airborne)
-[...BL].sort((a,b)=>a.st-b.st).forEach(b=>{const prev=coins.length?coins[coins.length-1].st:-1e9;const st=Math.max(b.st+30,prev+COIN_GAP);if(st-(b.st+30)>70)return;
-  const c=document.createElement('div');c.className='abs coin';c.innerHTML=coinSVG;$('coins').appendChild(c);coins.push({el:c,b,st,dur:COIN_DUR,i:coins.length});});
-const FIN=coins[coins.length-1].st+COIN_DUR; // last coin lands
-const HAPPY=FIN+60;
-const WAL={x:935,y:361};
-const sparks=[];for(let i=0;i<14;i++){const s=document.createElement('div');s.className='abs spk';s.innerHTML=sparkSVG(i%3===2?'#b3dac2':'#e8c468');$('sparks').appendChild(s);sparks.push({el:s,a:rnd()*Math.PI*2,d:90+rnd()*150,sz:.45+rnd()*.7})}
-{const g=$('dust');for(let j=0;j<18;j++){const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('fill',j%3===1?'#f0e6c8':'#dcefe3');g.appendChild(c)}}
-
-// ---------- mopi geometry ----------
-const HS=1.2; // hero scale; crop of viewBox x80..486, y40..510
-const CW=(486-80)*HS, CH=(510-40)*HS;
-const crop=document.querySelector('#mopi .crop');crop.style.width=CW+'px';crop.style.height=CH+'px';
-const himg=document.querySelector('#mopi .crop img');himg.style.width=640*HS+'px';himg.style.left=-80*HS+'px';himg.style.top=-40*HS+'px';
-$('mopi').style.width=CW+'px';$('mopi').style.height=CH+'px';
-const MOPI_Y=1012-CH;
-const happyEl=$('happy'); const HSZ=560; happyEl.style.width=HSZ+'px';happyEl.style.height=HSZ+'px';
-happyEl.style.transformOrigin=`${HSZ/2}px ${HSZ*0.92}px`;$('mopi').style.transformOrigin='50% 100%';
-const SWX=300; // mopi travel during sweep
-
-// ---------- caption animator ----------
-function caption(el,t,a,b){
-  const ws=el.querySelectorAll('.w');
-  const out=eInC(seg(t,b-280,b));
-  ws.forEach((w,i)=>{
-    const d=a+i*70+(w.closest('.sub')?260:0);
-    const p=eOutC(seg(t,d,d+420));
-    const y=(1-p)*46-out*24;
-    w.style.transform=`translateY(${y}px)`;w.style.opacity=p*(1-out);
-  });
-  el.style.opacity=(t<a||t>b)?0:1;
-  if(LAND)el.style.top=(CAP.cy-el.offsetHeight/2)+'px';
+// ================= layout (computed from viewport) =================
+const VW=window.innerWidth||1080, VH=window.innerHeight||1080;
+const U=Math.min(VW,VH)/1080, AR=VW/VH;
+const MODE=AR>1.3?'land':AR<0.8?'port':'sq';
+const stage=$('stage');stage.style.width=VW+'px';stage.style.height=VH+'px';
+const M=MODE==='land'?120*U:72*U;   // safe margin (≥64 px @1080)
+const L={};
+function layout(){
+  const A=window.ASSETS;
+  $('deskHero').src=A.deskHero;$('mobHero').src=A.mobHero;$('mobNav').src=A.mobNav;
+  $('mPrevHead').src=A.head;$('peek').src=A.head;$('happy').src=A.happy;$('uiHappy').src=A.happy;$('wave').src=A.explain;
+  $('logoImg').src=A.logo;$('logoSh').src=A.logo;
+  $('vCoin').innerHTML=coinSVG.replace('id="cgr"','id="cgrV"').replace('url(#cgr)','url(#cgrV)');
+  // ---- text blocks ----
+  const big=MODE==='land'?104:MODE==='port'?100:88;
+  buildKT($('tHook'),MODE==='land'?[[['Your'],['wallet'],['is']],[['full'],['of'],['empty','g hl']],[['token','g'],['accounts.','g']]]:[[['Your'],['wallet'],['is'],['full'],['of']],[['empty','g hl'],['token','g'],['accounts.','g']]]);
+  buildKT($('tValue'),[[['Each'],['one'],['still']],[['holds','g'],['SOL.','g sol']]]);
+  buildKT($('tFind'),MODE==='land'?[[['mopi'],['finds','g']],[['them.','g']]]:[[['mopi'],['finds','g'],['them.','g']]]);
+  buildKT($('tEnd'),[[['Clean'],['up.']],[['Get','g'],['your','g'],['SOL','g hl'],['back.','g']]],true);
+  const maxW=MODE==='land'?Math.min(860*U,VW*0.45):VW-2*M;
+  fitKT($('tHook'),big*U,maxW);fitKT($('tValue'),big*U,maxW);fitKT($('tFind'),big*U,MODE==='land'?Math.min(620*U,VW*0.33):maxW);
+  fitKT($('tEnd'),(MODE==='land'?108:MODE==='port'?104:96)*U,VW-2*M);
+  const hk=$('tHook'),vl=$('tValue'),fd=$('tFind');
+  if(MODE==='land'){
+    L.hook={x:M,y:VH*0.5-hk.offsetHeight/2-20*U};L.val={x:M,y:VH*0.5-vl.offsetHeight/2-20*U};
+    L.find={x:M,y:VH*0.5-fd.offsetHeight/2};
+  }else if(MODE==='port'){
+    L.hook={x:M,y:230*U};L.val={x:M,y:230*U};L.find={x:M,y:230*U};
+  }else{
+    L.hook={x:M,y:96*U};L.val={x:M,y:96*U};L.find={x:M,y:96*U};
+  }
+  [['tHook','hook'],['tValue','val'],['tFind','find']].forEach(([id,k])=>{const e=$(id);e.style.left=L[k].x+'px';e.style.top=L[k].y+'px'});
+  L.findBottom=L.find.y+fd.offsetHeight;
+  // ---- badges ----
+  ['b1','b2','b3'].forEach(id=>{const b=$(id);if(MODE==='sq'){b.querySelector('span').style.fontSize='34px';b.style.gap='18px';b.style.padding='18px 30px 20px 18px';const ic=b.querySelector('.ic');ic.style.width=ic.style.height='58px'}});
+  const bh=104*U, gap=24*U;
+  if(MODE==='land'){L.badges={x:M+10*U,y:VH*0.5-(3*bh+2*gap)/2,gap:bh+gap}}
+  else if(MODE==='port'){L.badges={x:M,y:300*U,gap:bh+gap}}
+  else{L.badges={x:M-8*U,y:320*U,gap:bh+gap}}
+  // ---- laptop ----
+  if(MODE==='land')L.lap={cx:VW*0.64,cy:VH*0.52,w:1080*U,push:0.15};
+  else if(MODE==='port')L.lap={cx:VW*0.5,cy:VH*0.43,w:VW-80*U,push:0.17};
+  else L.lap={cx:VW*0.5,cy:VH*0.6,w:960*U,push:0.15};
+  L.lap.k=L.lap.w/1440;
+  // ---- phone ----
+  if(MODE==='land')L.ph={cx:VW*0.69,cy:VH*0.53,w:440*U};
+  else if(MODE==='port')L.ph={cx:VW*0.5,cy:VH*0.665,w:560*U};
+  else L.ph={cx:VW*0.76,cy:VH*0.535,w:400*U};
+  L.ph.k=L.ph.w/422;
+  // ---- payoff positions ----
+  if(MODE==='land'){L.hap={x:VW*0.36,y:VH*0.9,s:470*U};L.phPay={dx:60*U,dy:0,s:0.97}}
+  else if(MODE==='port'){L.hap={x:VW*0.25,y:VH*0.94,s:420*U};L.phPay={dx:160*U,dy:-20*U,s:1.0}}
+  else{L.hap={x:VW*0.25,y:VH*0.96,s:440*U};L.phPay={dx:56*U,dy:14*U,s:0.97}}
+  // ---- payoff hero number ----
+  {const n=$('num');const phLeft=L.ph.cx+L.phPay.dx-211*L.ph.k*L.phPay.s;
+    const maxN=MODE==='port'?VW-2*M:phLeft-M-40*U;
+    let F=(MODE==='land'?150:MODE==='port'?128:104)*U;
+    n.style.fontSize=F+'px';n.querySelector('.l2').style.fontSize='0.4em';
+    let g=0;while($('numV').offsetWidth>maxN&&g++<80){F-=2;n.style.fontSize=F+'px'}
+    L.numF=F;
+    const y=MODE==='land'?Math.max(80*U,L.badges.y-n.offsetHeight-40*U):MODE==='port'?210*U:96*U;
+    L.num={x:M,y};n.style.transform=`translate(${M}px,${y}px)`;
+    const r=$('numWal').getBoundingClientRect();L.numWal={x:r.left+r.width/2,y:r.top+r.height/2};
+    const r2=$('numV').getBoundingClientRect();L.numVR={x:r2.left,y:r2.top,w:r2.width,h:r2.height};}
+  // ---- end card (centered column) ----
+  {const te=$('tEnd'),row=$('endRow'),eh=$('endHandle'),es=$('endSub');
+    const lh=(MODE==='port'?100:92)*U, lw=lh*1065/359;
+    const lg=$('endLogo');lg.style.width=lw+'px';lg.style.height=lh+'px';
+    row.style.gap=30*U+'px';
+    eh.style.fontSize=44*U+'px';eh.style.padding=`${14*U}px ${34*U}px ${18*U}px ${28*U}px`;eh.style.gap=12*U+'px';$('xIcon').style.width=$('xIcon').style.height=34*U+'px';
+    es.style.fontSize=38*U+'px';
+    const hs=(MODE==='port'?420:MODE==='land'?300:300)*U;
+    const g1=-6*U, g2=(MODE==='port'?64:44)*U, g3=(MODE==='port'?40:30)*U;
+    const total=hs+g1+te.offsetHeight+g2+row.offsetHeight+g3+es.offsetHeight;
+    let y0=(VH-total)/2-(MODE==='port'?30*U:0);
+    L.end={hap:{x:VW/2,y:y0+hs,s:hs}};y0+=hs+g1;
+    L.end.head={x:(VW-te.offsetWidth)/2,y:y0};y0+=te.offsetHeight+g2;
+    L.end.row={x:(VW-row.offsetWidth)/2,y:y0,w:row.offsetWidth,h:row.offsetHeight,lw,lh};y0+=row.offsetHeight+g3;
+    L.end.sub={x:(VW-es.offsetWidth)/2,y:y0};
+    L.end.glowW=hs*2.6;$('endGlow').style.width=L.end.glowW+'px';$('endGlow').style.height=L.end.glowW*0.8+'px';
+    const rs=(MODE==='port'?1900:1500)*U;const ry=$('rays');ry.style.width=ry.style.height=rs+'px';L.end.raysS=rs;}
+  $('scrim2').style.background=MODE==='land'?'linear-gradient(90deg,rgba(244,248,246,.96) 0%,rgba(244,248,246,.88) 30%,rgba(244,248,246,0) 56%)':'linear-gradient(180deg,rgba(244,248,246,.92) 0%,rgba(244,248,246,.65) '+(MODE==='port'?'20%':'26%')+',rgba(244,248,246,0) '+(MODE==='port'?'34%':'46%')+')';
+  buildCards();buildFG();buildMobileList();buildDeskRows();buildFX();
+  L.ready=true;
 }
-const fmt=v=>v.toFixed(4);
+// ---------- kinetic type ----------
+function buildKT(el,lines,center){
+  el.innerHTML='';
+  lines.forEach(ws=>{const ln=document.createElement('span');ln.className='ln';if(center)ln.style.textAlign='center';
+    ws.forEach(([w,c],i)=>{const s=document.createElement('span');s.className='w '+(c||'');s.textContent=w;
+      if(c&&c.includes('hl')){const b=document.createElement('span');b.className='hlbar';s.appendChild(b)}
+      ln.appendChild(s);if(i<ws.length-1)ln.appendChild(document.createTextNode(' '))});
+    el.appendChild(ln)});
+}
+function fitKT(el,fs,maxW){el.style.fontSize=fs+'px';el.style.whiteSpace='nowrap';
+  let guard=0;while(el.scrollWidth>maxW&&guard++<80){fs-=2;el.style.fontSize=fs+'px'}
+  el.style.width=Math.ceil(el.scrollWidth+4)+'px';}
+// word reveal: masked rise with per-word easing, stagger; exit up. opt.lines = explicit start per line
+function animKT(el,t,tin,tout,opt={}){
+  const ws=el.querySelectorAll('.w');const st=opt.stagger||75, ld=opt.lineDelay||140, hlo=opt.hlOff===undefined?420:opt.hlOff;
+  if(t<tin-50&&!opt.lines||t>tout+700){el.style.visibility='hidden';return}
+  el.style.visibility='visible';
+  let li=-1,lastLn=null,wi=0;
+  ws.forEach((w,i)=>{
+    const ln=w.parentNode;if(ln!==lastLn){li++;lastLn=ln;wi=0}
+    const d=opt.lines?opt.lines[li]+wi*st:tin+i*st+li*ld;wi++;
+    const accent=w.classList.contains('g');
+    const p=seg(t,d,d+(accent?620:540));
+    const e=accent?eOutX(p):eOutQ(p);
+    const q=eInC(seg(t,tout+i*12,tout+i*12+210));
+    const y=(1-e)*112-q*112; // % of line height
+    const r=(1-e)*6;
+    w.style.transform=`translateY(${y}%) rotate(${r}deg)`;
+    const hb=w.querySelector('.hlbar');if(hb){const h=seg(t,d+hlo,d+hlo+400);hb.style.transform=`scaleX(${eInOutC(h)})`}
+  });
+}
+
+// ---------- hook/value: 3D field of account rows ----------
+const cards=[];
+const CARD_DATA=[['Account 07','5Qx3...7K9m'],['Account 12','9LmH...2vQf'],['Account 03','F8tR...6Z1p'],['Account 19','3NwK...9D2a']];
+function idn(k){const c=['#b3dac2','#95c9a9','#cfe8d8','#74b18c'][k%4];
+  return k%3===0?`<svg class="idn" viewBox="0 0 38 38"><rect x="4" y="4" width="30" height="30" rx="6" fill="${c}"/></svg>`:k%3===1?`<svg class="idn" viewBox="0 0 38 38"><circle cx="19" cy="19" r="15" fill="${c}"/></svg>`:`<svg class="idn" viewBox="0 0 38 38"><path d="M19 3l14 8v16l-14 8-14-8V11z" fill="${c}"/></svg>`}
+const B58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function cardHTML(nm,ad,n,hero){return `<div class="cb"><svg width="16" height="16" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>${idn(n)}<div class="nm"><b>${nm}</b><i>${ad}</i></div><div class="rt"><span class="zt">0 tokens</span><span class="sol"><span class="glow"></span><span class="sv">0.002 SOL</span></span></div><div class="shine"><i></i></div>`+(hero?'<div id="x24">×24</div>':'')}
+function buildCards(){
+  const g=$('cardsG');g.innerHTML='';const R=rng(42);
+  const pl=document.createElement('div');pl.id='plane';g.appendChild(pl);
+  const addr=()=>{let a='',b='';for(let i=0;i<4;i++){a+=B58[(R()*58)|0];b+=B58[(R()*58)|0]}return a+'...'+b};
+  const COLS=3, ROWS=14; let n=0;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    n++;const d=document.createElement('div');d.className='acard';
+    const isHero=(c===1&&r===8);
+    const nm=isHero?'Account 07':'Account '+String(1+((n*7)%24)).padStart(2,'0');
+    d.innerHTML=cardHTML(nm,isHero?'5Qx3...7K9m':addr(),n,isHero);
+    d.style.left='-235px';d.style.top='-48px';
+    pl.appendChild(d);
+    const x=(c-1)*500+(r%2?70:-30), y=(r-6.5)*122;
+    const card={el:d,x,y,hero:isHero,ph:R()*6.28,sol:d.querySelector('.sv'),glow:d.querySelector('.glow'),shine:d.querySelector('.shine i'),zt:d.querySelector('.zt')};
+    if(isHero)cards.unshift(card);else cards.push(card);
+  }
+  cards.forEach(c=>{const dd=Math.hypot(c.x-cards[0].x,c.y-cards[0].y);c.dd=dd;c.rank=c.hero?0:dd<640?1:2});
+  PL=MODE==='land'?{a:52,b:-30,dx:520,dy:60,z:1.2}:MODE==='port'?{a:52,b:-28,dx:40,dy:220,z:1.3}:{a:52,b:-30,dx:110,dy:230,z:1.22};
+  L.heroT=MODE==='land'?{x:VW*0.68,y:VH*0.56,s:1.7}:MODE==='port'?{x:VW*0.5,y:VH*0.6,s:1.85}:{x:VW*0.5,y:VH*0.64,s:1.75};
+}
+// near-camera foreground cards (heavy blur) for the rack-focus open
+const FG=[];
+function buildFG(){const g=$('fgCards');g.innerHTML='';
+  const pos=MODE==='land'?[[0.9,0.92,2.6,-24],[0.47,1.06,2.2,-30],[1.08,0.18,2.0,-28]]:MODE==='port'?[[0.12,0.96,2.5,-26],[0.98,0.78,2.3,-30],[1.05,0.12,1.8,-24]]:[[0.08,0.97,2.4,-26],[1.02,0.6,2.1,-30]];
+  pos.forEach(([x,y,s,r],i)=>{const d=document.createElement('div');d.className='acard';d.innerHTML=cardHTML('Account '+['21','08','15'][i],['Gh2k...9QwP','Tm7x...3RdA','Aq5n...8KvB'][i],i+2,false);
+    d.style.left='-235px';d.style.top='-48px';g.appendChild(d);FG.push({el:d,x:x*VW,y:y*VH,s:s*U,r})});}
+function renderFG(t){
+  const g=$('fgCards');if(t>T.push+600){g.style.display='none';return}g.style.display='block';
+  const rk=eInOutC(seg(t,0,650));
+  FG.forEach((f,i)=>{const dx=-t*0.05*U*(1+i*0.3)-rk*30*U, dy=-t*0.012*U;
+    const out=eInC(seg(t,T.push-400,T.push+500));
+    f.el.style.transform=`translate(${f.x+dx}px,${f.y+dy+out*200*U}px) rotate(${f.r}deg) scale(${f.s*(1+0.04*rk)})`;
+    f.el.style.filter=`blur(${(lerp(2.5,24,rk)*U).toFixed(2)}px)`;
+    f.el.style.opacity=(0.95-0.15*rk)*(1-out)});
+}
+let PL=null; const PERS=1500;
+function planeScroll(t){ // slow list drift that settles before the push-in
+  const v=0.05; const t1=T.push+700;
+  return t<T.push?v*t:v*T.push+v*700*eOutC(seg(t,T.push,t1))*0.5}
+function proj(x,y,z,pose){
+  const P=PERS*U, a=pose.a*Math.PI/180, b=pose.b*Math.PI/180;
+  const x1=x*Math.cos(b)-y*Math.sin(b), y1=x*Math.sin(b)+y*Math.cos(b), z1=z;
+  const y2=y1*Math.cos(a)-z1*Math.sin(a), z2=y1*Math.sin(a)+z1*Math.cos(a);
+  const Z=pose.Z, X=x1*Z+pose.tx, Y=y2*Z+pose.ty, Zc=z2*Z;
+  const k=P/(P-Zc);
+  return [VW/2+X*k, VH/2+Y*k, k, Zc];
+}
+function planePose(t){
+  const h=eInOutC(seg(t,T.push,T.push+1050));
+  const sc=planeScroll(t);
+  const drift=eInOutC(seg(t,-400,T.push+800));
+  const base={a:PL.a,b:PL.b+4*drift,Z:PL.z*U*(1+0.07*seg(t,0,T.push)),tx:PL.dx*U,ty:PL.dy*U};
+  const hero=cards[0];
+  const lift=150*h;
+  const P=PERS*U,a=PL.a*Math.PI/180,b=base.b*Math.PI/180;
+  const hy=hero.y-sc;
+  const y1=hero.x*Math.sin(b)+hy*Math.cos(b);
+  const z2=y1*Math.sin(a)+lift*Math.cos(a);
+  const st=L.heroT.s*U*(1+0.07*eInOutC(seg(t,T.push+900,T.whip[0]+200)));
+  const Z1=st*P/(P+st*z2);
+  const Z=lerp(base.Z,Z1,h);
+  const x1=hero.x*Math.cos(b)-hy*Math.sin(b), y2=y1*Math.cos(a)-lift*Math.sin(a);
+  const Zc=z2*Z, k=P/(P-Zc);
+  const txF=(L.heroT.x-VW/2)/k-x1*Z, tyF=(L.heroT.y-VH/2)/k-y2*Z;
+  return {a:PL.a,b:base.b,Z,tx:lerp(base.tx,txF,h),ty:lerp(base.ty,tyF,h),h,lift,sc};
+}
+const mix=(c1,c2,p)=>`rgb(${lerp(c1[0],c2[0],p)|0},${lerp(c1[1],c2[1],p)|0},${lerp(c1[2],c2[2],p)|0})`;
+function renderCards(t){
+  const g=$('cardsG');$('scrim2').style.opacity=t>T.whip[0]?1-seg(t,T.whip[0],T.whip[0]+200):1;
+  $('grade').style.opacity=1-seg(t,T.whip[0],T.whip[1]);
+  const wx=whipX(t);
+  if(t>T.whip[1]+50){g.style.display='none';return}g.style.display='block';
+  mblur(g,'mbA',vel(whipX,t)*12,0);
+  const pose=planePose(t);
+  const pl=$('plane');
+  pl.style.transform=`translate3d(${VW/2+pose.tx+wx}px,${VH/2+pose.ty}px,0) scale3d(${pose.Z},${pose.Z},${pose.Z}) rotateX(${pose.a}deg) rotateZ(${pose.b}deg)`;
+  g.style.perspective=PERS*U+'px';g.style.perspectiveOrigin=`${VW/2+wx}px ${VH/2}px`;
+  const hf=proj(cards[0].x,cards[0].y-pose.sc,pose.lift,pose);
+  const pushP=pose.h;
+  const rackB=(1-eInOutC(seg(t,0,650)))*7*U;   // rack focus: list starts soft, pulls sharp by 0.65 s
+  cards.forEach((c,i)=>{
+    const y=c.y-pose.sc;
+    const [sx,sy,k,zc]=proj(c.x,y,c.hero?pose.lift:0,pose);
+    const dzs=(zc-hf[3])/U;   // >0 nearer than focus
+    let blur=Math.min(12,Math.abs(dzs)*(dzs>0?0.0055:0.012))*U;
+    let op=clamp(1-(hf[3]-zc)/U/1600)*clamp((sx+600*U)/(600*U))*clamp((VW+600*U-sx)/(600*U));
+    const lt=T.wave[c.rank]+(c.rank?Math.min(c.dd,1600)*0.05:0);
+    const lp=seg(t,lt,lt+380), le=eOutC(lp);
+    const pop=Math.sin(Math.PI*seg(t,lt,lt+420))*0.06;
+    if(c.hero){
+      blur=lerp(blur,0,pushP);op=1;
+      const h=pushP;
+      c.el.style.transform=`translate3d(${c.x}px,${y}px,${pose.lift}px) rotateZ(${-pose.b*h}deg) rotateX(${-PL.a*h}deg) rotate(${-2*h+Math.sin(t/1000*0.9)*0.6*h}deg) scale(${1+pop})`;
+    }else{
+      op*=1-0.12*pushP;blur+=pushP*1.5*U;
+      const bob=Math.sin(t/1000*1.3+c.ph)*6;
+      c.el.style.transform=`translate3d(${c.x}px,${y}px,${bob+pop*120}px)`;
+    }
+    blur+=rackB;
+    const intro=eOutC(seg(t,-300+i*12,450+i*12));
+    c.el.style.opacity=op*(t<=0?1:intro>0?intro:1);
+    const lb=blur/(pose.Z*k);
+    c.el.style.filter=lb>0.35?`blur(${lb.toFixed(2)}px)`:'none';
+    // lit on the beat: card turns mint, SOL goes money-green with a gold flash
+    c.el.style.background=le>0?mix([255,255,255],[232,246,237],le):'#fff';
+    c.el.style.borderColor=le>0?mix([225,230,227],[140,196,162],le):'#e1e6e3';
+    c.sol.style.color=le>0?mix([154,164,159],[46,106,77],le):'#9aa49f';
+    c.zt.style.background=le>0?mix([245,235,201],[207,232,216],le):'#f5ebc9';c.zt.style.color=le>0?mix([109,90,37],[36,80,59],le):'#6d5a25';
+    c.glow.style.opacity=Math.sin(Math.PI*clamp(lp*1.1))*(c.hero?1:.8);
+    const sh=seg(t,lt-80,lt+520);c.shine.style.transform=`translateX(${lerp(-120,520,eInOutC(sh))}px) skewX(-18deg)`;c.shine.style.opacity=sh>0&&sh<1?1:0;
+  });
+  {const r=cards[0].sol.getBoundingClientRect();L.solR={x:r.left+r.width/2,y:r.top+r.height/2,w:r.width};
+   const r2=cards[0].el.getBoundingClientRect();L.heroR={x:r2.left,y:r2.top,w:r2.width,h:r2.height};}
+  const xp=seg(t,T.x24,T.x24+450);const xb=$('x24');
+  if(xb){xb.style.opacity=xp>0?1:0;xb.style.transform=`scale(${xp>0?eOutBack(xp,2.2):0}) rotate(${(1-xp)*12}deg)`}
+}
+function camZ(t){return planeScroll(t)}
+function whipX(t){return -eInOutC(seg(t,T.whip[0],T.whip[1]))*VW*1.1}
+// value: gold coin rises out of the hero card + "≈0.002 SOL" pill
+function renderValFX(t){
+  const g=$('valFX');
+  if(t<T.coinUp||t>T.whip[1]+50||!L.solR){g.style.display='none';return}g.style.display='block';
+  const wx=whipX(t);mblur(g,'mbD',vel(whipX,t)*12,0);
+  const p=seg(t,T.coinUp,T.coinUp+650);
+  const cs=104*U;
+  const rise=eOutBack(p,1.4);
+  const glint=Math.max(Math.sin(Math.PI*seg(t,4500,4780)),Math.sin(Math.PI*seg(t,5000,5280)));
+  const bob=Math.sin((t-T.coinUp)/1000*2.4)*6*U*seg(t,T.coinUp+600,T.coinUp+900);
+  const x=L.solR.x+wx, y=L.solR.y-lerp(0,(MODE==='land'?150:170)*U,rise)+bob;
+  const flip=Math.cos(eOutC(seg(t,T.coinUp,T.coinUp+520))*Math.PI*4);
+  const sc=lerp(0.35,1,eOutC(p))*(1+0.1*glint);
+  const c=$('vCoin');c.style.width=c.style.height=cs+'px';
+  c.style.transform=`translate(${x-cs/2}px,${y-cs/2}px) scale(${sc*Math.max(0.15,Math.abs(flip))},${sc})`;
+  c.style.opacity=clamp(p*4);c.style.filter=glint>0.05?`brightness(${1+0.35*glint}) drop-shadow(0 0 ${18*U*glint}px rgba(232,196,104,.9))`:`drop-shadow(0 ${14*U}px ${16*U}px rgba(120,90,30,.28))`;
+  L.vCoin={x,y,s:cs};
+  const pp=seg(t,T.pill,T.pill+450);const pill=$('vPill');
+  pill.style.fontSize=(MODE==='sq'?36:40)*U+'px';pill.style.padding=`${12*U}px ${26*U}px ${15*U}px`;
+  const pw=pill.offsetWidth, ph=pill.offsetHeight;
+  pill.style.transform=`translate(${x-cs*0.62-pw}px,${y-ph/2}px) scale(${pp>0?0.7+0.3*eOutBack(pp,1.8):0.7})`;
+  pill.style.opacity=eOutC(pp);
+}
+// waving mascot (explain.svg): hops in on the value beat, carried into the portrait laptop beat
+function waveState(t){
+  const S0=(MODE==='port'?440:MODE==='land'?360:360)*U;
+  const rest=MODE==='land'?{x:VW*0.1,b:VH+0.08*S0}:MODE==='port'?{x:VW*0.2,b:VH+0.06*S0}:{x:VW*0.15,b:VH+0.08*S0};
+  const p=seg(t,T.mascIn,T.mascIn+500);
+  let x=lerp(rest.x-120*U,rest.x,p), b=lerp(rest.b+S0*1.1,rest.b,p)-4*170*U*p*(1-p), S=S0, r=lerp(-14,0,eOutC(p)), sx=1, sy=1;
+  if(p>=1){const k=wob((t-T.mascIn-500)/1000,2.6,5);sy=1-0.12*k;sx=1+0.08*k}
+  const idle=Math.sin((t-T.mascIn)/1000*2*Math.PI*0.8);r+=2.5*idle*seg(t,T.mascIn+700,T.mascIn+1000);
+  let blurX=0;
+  if(MODE==='port'){ // glides to centre-bottom under the laptop, then ducks out as the phone rises
+    const q=eInOutC(seg(t,T.whip[0],T.whip[1]+250));
+    x=lerp(x,VW*0.5,q);S=lerp(S0,560*U,q);b=lerp(b,VH+0.03*560*U,q);
+    b+=eInC(seg(t,T.rise[0]-150,T.rise[0]+350))*S*1.2;
+  }else{x+=whipX(t)*1.3;blurX=vel(whipX,t)*12*1.3}
+  return {x,b,S,r,sx,sy,blurX,on:t>=T.mascIn&&t<(MODE==='port'?T.rise[0]+400:T.whip[1]+60)};
+}
+function renderWave(t){
+  const w=$('wave');const s=waveState(t);
+  if(!s.on){w.style.opacity=0;w.style.filter='none';return}
+  w.style.width=w.style.height=s.S+'px';
+  w.style.transform=`translate(${s.x-s.S/2}px,${s.b-s.S}px) rotate(${s.r}deg) scale(${s.sx},${s.sy})`;w.style.opacity=1;
+  if(Math.abs(s.blurX)>0.3)mblur(w,'mbF',s.blurX,0);else w.style.filter=`drop-shadow(0 ${20*U}px ${24*U}px rgba(28,58,42,.22))`;
+}
+
+// ---------- desktop rows / mobile list ----------
+function buildDeskRows(){const tb=$('dtable');[...tb.querySelectorAll('.dtr')].forEach(n=>n.remove());
+  CARD_DATA.slice(0,4).forEach(([n,a],i)=>{const r=document.createElement('div');r.className='dtr';
+    r.innerHTML=`<div class="c1"><div class="chk"><svg width="11" height="11" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div><div class="c2" style="padding-left:12px">${idn(i).replace('class="idn"','width="18" height="18"')}<div><b>${['Account 01','Account 02','Account 03','Account 04'][i]}</b><i>${['5Qx3...7K9m','9LmH...2vQf','F8tR...6Z1p','3NwK...9D2a'][i]}</i></div></div><div class="c3">0</div><div class="c3">0.002 SOL</div><div class="c4"><span class="pill">Eligible</span></div>`;tb.appendChild(r)})}
+function buildMobileList(){const l=$('mlist');l.innerHTML='';
+  ['Account 01','Account 02','Account 03','Account 04'].forEach((n,i)=>{const r=document.createElement('div');r.className='mli';
+    r.innerHTML=`<div class="chk" style="width:22px;height:22px;border-radius:6px"><svg width="13" height="13" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>${idn(i).replace('class="idn"','width="20" height="20"')}<div class="n"><b>${n}</b><i>${['5Qx3...7K9m','9LmH...2vQf','F8tR...6Z1p','3NwK...9D2a'][i]}</i></div><div class="r"><i>0 tokens</i><b>0.002 SOL</b></div>`;l.appendChild(r)})}
+
+// ---------- coins & sparkles ----------
+const coinSVG=`<svg viewBox="0 0 56 56" width="56" height="56"><defs><radialGradient id="cgr" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#fff4c9"/><stop offset=".45" stop-color="#eccb6b"/><stop offset="1" stop-color="#c3943a"/></radialGradient></defs><circle cx="28" cy="28" r="26" fill="url(#cgr)" stroke="#b58a2f" stroke-width="2"/><circle cx="28" cy="28" r="18.5" fill="none" stroke="#fff6d8" stroke-width="2.6" opacity=".85"/><path d="M28 16.5l2.8 8.7 8.7 2.8-8.7 2.8-2.8 8.7-2.8-8.7-8.7-2.8 8.7-2.8z" fill="#fffbea"/></svg>`;
+const sparkSVG=c=>`<svg viewBox="0 0 40 40" width="40" height="40"><path d="M20 1.5q2.3 14.2 18.5 18.5q-16.2 4.3-18.5 18.5q-2.3-14.2-18.5-18.5q16.2-4.3 18.5-18.5z" fill="${c}"/></svg>`;
+const COINS=[],SPARKS=[];
+function buildFX(){
+  const cg=$('coins');cg.innerHTML='';const R=rng(7);
+  for(let i=0;i<8;i++){const grp=[];for(let g=0;g<3;g++){const d=document.createElement('div');d.className='coin';d.innerHTML=coinSVG;cg.appendChild(d);grp.push(d)}
+    COINS.push({els:grp,st:COIN_ST(i),dur:COIN_DUR,arc:60+R()*90,dx:(R()-.5)*80})}
+  const sg=$('sparks');sg.innerHTML='';
+  for(let i=0;i<36;i++){const d=document.createElement('div');d.className='spk';d.innerHTML=sparkSVG(i%4===3?'#b3dac2':'#e8c468');sg.appendChild(d);SPARKS.push({el:d,a:R()*Math.PI*2,r:0.6+R()*0.5,s:0.35+R()*0.6,ph:R()*6.28})}
+  const bl=$('blobs');bl.innerHTML='';
+  [[0.15,0.2,0.55,'#d8eee1',.9],[0.85,0.15,0.45,'#f3ecd2',.55],[0.8,0.85,0.6,'#cfe8d8',.8],[0.2,0.9,0.4,'#e4f2e9',.9]].forEach(([x,y,r,c,o],i)=>{const d=document.createElement('div');d.className='blob';const R2=Math.max(VW,VH)*r;
+    d.style.width=d.style.height=R2+'px';d.style.background=`radial-gradient(closest-side,${c},rgba(255,255,255,0))`;d.style.opacity=o;d.dataset.x=x*VW-R2/2;d.dataset.y=y*VH-R2/2;bl.appendChild(d)});
+}
+
+// ---------- devices ----------
+function lapState(t){
+  const inP=eInOutC(seg(t,T.whip[0]+80,T.whip[1]+120));
+  const x0=VW*1.1*(1-inP);
+  const push=eInOutC(seg(t,...T.lapPush));
+  const back=eInOutC(seg(t,...T.lapBack));
+  let k=L.lap.k*(1+0.03*seg(t,T.whip[1],T.lapPush[0])+L.lap.push*push);
+  // push-in focus: centre of scan panel + preview card (page coords)
+  const fx=720, fy=600;
+  let cx=L.lap.cx+x0, cy=L.lap.cy;
+  const pxF=cx+(fx-720)*k, pyF=cy+(fy+44-472)*k;
+  // keep the window top below the headline, and the panel bottom inside the frame
+  let tyT=L.lap.cy+20*U;
+  const kE=L.lap.k*(1.03+L.lap.push);
+  if(MODE!=='land'){const top=tyT-(fy+44)*kE; if(top<L.findBottom+24*U)tyT+=L.findBottom+24*U-top;}
+  const tx=lerp(0,L.lap.cx-pxF+x0*0,push), ty=lerp(0,tyT-pyF,push);
+  cx+=tx;cy+=ty;
+  const bk=MODE==='land'?{x:-VW*0.16,y:-20*U,s:0.62}:MODE==='port'?{x:0,y:-VH*0.17,s:0.72}:{x:-VW*0.18,y:-40*U,s:0.62};
+  cx=lerp(cx,L.lap.cx+bk.x,back);cy=lerp(cy,L.lap.cy+bk.y,back);k=lerp(k,L.lap.k*bk.s,back);
+  const rotY=lerp(-6,-2,seg(t,T.whip[0],T.lapPush[1]))*(1-push*0.5);
+  return {cx,cy,k,blur:back*7*U,op:1-seg(t,T.rise[1]+500,T.rise[1]+1100),rotY};
+}
+function renderLap(t){
+  const g=$('lapG');
+  if(t<T.whip[0]||t>T.rise[1]+1200){g.style.display='none';return}g.style.display='block';
+  const s=lapState(t);
+  const w=$('lapWrap');
+  w.style.transform=`translate(${s.cx}px,${s.cy}px) perspective(2400px) rotateY(${s.rotY}deg) rotateX(2deg) scale(${s.k}) translate(-720px,-472px)`;
+  g.style.opacity=s.op;
+  const vx=vel(tt=>lapState(tt).cx,t);
+  if(s.blur>0.3){g.style.filter=`blur(${s.blur.toFixed(2)}px)`}else if(t<T.whip[1]+200)mblur(g,'mbB',vx*12,0);else g.style.filter='none';
+  const sh=$('lapShadow');tf(sh,s.cx-720,s.cy+472*s.k*1.02-60,1,0,0.9*s.op);sh.style.transform+=` scale(${s.k*1.05},${s.k})`;sh.style.transformOrigin='720px 60px';
+  const cp=seg(t,...T.cur);const ce=eInOutC(cp);
+  const cur=$('cursor');
+  const cxp=lerp(1180,840,ce), cyp=lerp(820,505,ce);
+  const press=t>T.click&&t<T.click+160?0.88:1;
+  cur.style.transform=`translate(${cxp}px,${cyp}px) scale(${press})`;cur.style.opacity=t<T.cur[0]?0:1-seg(t,T.results+500,T.results+800);
+  const btn=$('dScan');btn.style.transform=`scale(${t>T.click&&t<T.click+180?0.96:1})`;
+  const spinning=t>=T.spin[0]&&t<T.spin[1];
+  $('dSpin').style.opacity=spinning?1:0;$('dSpin').style.transform=`rotate(${(t-T.spin[0])*0.9}deg)`;
+  $('dScanL').style.opacity=1;$('dScanA').style.opacity=spinning?0:1;
+  $('dScanL').style.paddingLeft=spinning?'18px':'0';
+  const rp=seg(t,T.results,T.results+450);
+  const res=$('dres');res.style.opacity=t<T.results?0:1;
+  res.querySelector('h4').style.opacity=eOutC(rp);
+  const cnt=eOutC(seg(t,T.results,T.results+600));
+  $('dN1').textContent=Math.round(24*cnt);$('dN2').textContent=Math.round(6*cnt);$('dN3').textContent=Math.round(1*cnt);
+  res.querySelectorAll('.dtile,.dtabs,.dtable').forEach((n,i)=>{const p=eOutC(seg(t,T.results+i*55,T.results+i*55+380));n.style.opacity=p;n.style.transform=`translateY(${(1-p)*10}px)`});
+  const pv=$('dprev');pv.querySelectorAll(':scope>*').forEach((n,i)=>{const p=eOutC(seg(t,T.results+80+i*60,T.results+80+i*60+380));n.style.opacity=t<T.results?0.0:p;n.style.transform=`translateY(${(1-p)*10}px)`});
+  const vc=eOutC(seg(t,T.results+150,T.results+700));
+  $('dV1').textContent=(0.0489*vc).toFixed(4);$('dV4').textContent=(0.0468*vc).toFixed(4)+' SOL';
+  const sw=seg(t,T.whip[1]+150,T.whip[1]+1100);$('lapSweep').style.transform=`translateX(${lerp(-300,1700,eInOutC(sw))}px) skewX(-20deg)`;$('lapSweep').style.opacity=sw>0&&sw<1?0.8:0;
+}
+function phoneBase(t){
+  const r=seg(t,...T.rise);const e=eOutX(r);
+  let cx=L.ph.cx, cy=L.ph.cy+(1-e)*VH*0.95, k=L.ph.k, rot=(1-e)*-8;
+  const pp=eInOutC(seg(t,T.pop-150,T.pop+500));
+  cx+=L.phPay.dx*pp;cy+=L.phPay.dy*pp;k*=lerp(1,L.phPay.s,pp);
+  cy+=Math.sin(t/1000*1.2)*5*U;rot+=Math.sin(t/1000*0.7)*0.5;
+  const x=seg(t,...T.exit);k*=1-0.04*eOutC(x);
+  return {cx,cy,k,rot};
+}
+function phoneZoom(t){
+  const z1=eInOutC(seg(t,...T.phPush));
+  const z2=eInOutC(seg(t,T.sheet[1]-100,T.sheet[1]+400));
+  const z3=eInOutC(seg(t,T.iris[0],T.iris[1]+250));
+  const zOut=eInOutC(seg(t,T.pop-200,T.pop+500));
+  const amp=MODE==='port'?0.10:0.16;
+  let z=1+amp*z1-0.04*z2+0.02*z3;z=lerp(z,1,zOut);
+  const fb=MODE==='port'?260:0;
+  let fy=lerp(-40+fb,40+fb,z1);fy=lerp(fy,120+fb*0.8,z2);fy=lerp(fy,-60+fb*0.6,z3);
+  return {z,fx:0,fy};
+}
+const IRIS={x:195,y:757-54};
+function renderPhone(t){
+  const g=$('phoneG');
+  if(t<T.rise[0]||t>T.exit[1]+50){g.style.display='none';return}g.style.display='block';
+  const b=phoneBase(t),zz=phoneZoom(t);
+  const k=b.k*zz.z;
+  const cx=b.cx-zz.fx*b.k*(zz.z-1), cy=b.cy-zz.fy*b.k*(zz.z-1);
+  const w=$('phoneWrap');
+  w.style.transform=`translate(${cx}px,${cy}px) rotate(${b.rot}deg) scale(${k}) translate(-211px,-438px)`;
+  L.phNow={cx,cy,k,rot:b.rot};
+  const vy=vel(tt=>phoneBase(tt).cy,t);
+  mblur(w,'mbC',0,vy*10);
+  const sh=$('phoneShadow');const lift=clamp(1-(b.cy-L.ph.cy)/(VH*0.5));
+  sh.style.transform=`translate(${cx-250}px,${L.ph.cy+438*b.k*0.98-45+(b.cy-L.ph.cy)*0.2}px) scale(${k*0.95},${k})`;sh.style.opacity=0.85*lift;
+  // ---- screen ----
+  const scrollF=tt=>450*eInOutC(seg(tt,...T.scroll));
+  const scroller=$('scroller');
+  scroller.style.transform=`translateY(${-scrollF(t)}px)`;
+  const sv=vel(scrollF,t);
+  const shp=seg(t,...T.sheet);
+  const se=shp<=0?0:(1-Math.pow(1-shp,4));
+  const sheetTop=lerp(844,68,se);
+  $('sheet').style.transform=`translateY(${sheetTop}px)`;
+  $('scrim').style.opacity=se;
+  const pageBlur=se*5;
+  if(pageBlur>0.2)scroller.style.filter=`blur(${pageBlur.toFixed(2)}px)`;else mblur(scroller,'mbE',0,Math.min(2.4,Math.abs(sv)*2));
+  // iris: the tap on "Approve in wallet" opens a mint iris onto the success screen
+  const ip=eInOutC(seg(t,...T.iris));
+  const done=$('done'),ring=$('irisRing');
+  const Rm=Math.hypot(IRIS.x,Math.max(IRIS.y,790-IRIS.y))+30;
+  if(t<T.iris[0]){done.style.visibility='hidden';ring.style.opacity=0}
+  else{done.style.visibility='visible';const r=Rm*ip;done.style.clipPath=ip>=1?'none':`circle(${r.toFixed(1)}px at ${IRIS.x}px ${IRIS.y}px)`;
+    const rr=r+3;ring.style.width=ring.style.height=2*rr+'px';ring.style.transform=`translate(${IRIS.x-rr}px,${IRIS.y+54-rr}px)`;ring.style.opacity=ip<1?1-seg(ip,.7,1):0;ring.style.borderWidth=lerp(10,4,ip)+'px'}
+  const uh=$('uiHappy');const hp=seg(t,T.iris[0]+200,T.iris[1]+250);
+  uh.style.transform=`scale(${hp<=0?0.4:eOutBack(hp,2)})`;uh.style.transformOrigin='50% 90%';
+  uh.style.opacity=t<T.pop?clamp(hp*3):0;
+  const ck=seg(t,T.pop+250,T.pop+600);$('uiCheck').style.opacity=ck>0?1:0;$('uiCheck').style.transform=`scale(${ck>0?eOutBack(ck,2):0})`;$('uiChkP').style.strokeDashoffset=1-eOutC(seg(t,T.pop+350,T.pop+700));
+  const wt=t>=T.wait[0];
+  $('apL').style.opacity=wt?0:1;$('apW').style.opacity=wt?1:0;$('apSpin').style.transform=`rotate(${(t-T.wait[0])*0.9}deg)`;
+  $('mApprove').style.transform=`scale(${t>T.tap2&&t<T.tap2+170?0.97:1})`;
+  $('mReview').style.transform=`scale(${t>T.tap1&&t<T.tap1+170?0.97:1})`;
+  ripple($('rip1'),t,T.tap1,179,23);ripple($('rip2'),t,T.tap2,179,23);
+  touch(t);
+  const gs=seg(t,T.rise[1]-150,T.rise[1]+800);const ph=$('phSweep');ph.style.transform=`translateX(${lerp(-260,560,eInOutC(gs))}px) rotate(18deg)`;
+  const gs2=seg(t,T.iris[1],T.iris[1]+700);
+  ph.style.opacity=gs>0&&gs<1?0.7:gs2>0&&gs2<1?0.6:0;if(gs2>0&&gs2<1)ph.style.transform=`translateX(${lerp(-260,560,eInOutC(gs2))}px) rotate(18deg)`;
+  const pk=$('peek');
+  const pin=eOutBack(seg(t,T.peek[0],T.peek[0]+500),1.6), pout=eInC(seg(t,T.peek[1]-350,T.peek[1]));
+  const pv=clamp(pin)-pout;
+  const ps=(MODE==='port'?190:160)*U;
+  const ex=cx-211*k+14*k, ey=cy+(MODE==='port'?150:170)*k;
+  pk.style.width=pk.style.height=ps+'px';
+  tf(pk,ex+10*U-(ps*0.6+10*U)*pv,ey-ps/2,1,-16*pv+Math.sin(t/1000*3)*2.5*pv,pv>0.02?1:0);
+  pk.style.zIndex=0;
+}
+function ripple(el,t,t0,x,y){const p=seg(t,t0,t0+520);el.style.left=x+'px';el.style.top=y+'px';el.style.width=el.style.height='20px';el.style.marginLeft=el.style.marginTop='-10px';el.style.transform=`scale(${p>0?p*22:0})`;el.style.opacity=p>0?(1-p)*0.9:0}
+function touch(t){
+  const tc=$('touch'),rg=$('touchRing');
+  const taps=[{t:T.tap1,x:195,y:(886+23)-450+54+0,fromx:300,fromy:640},{t:T.tap2,x:195,y:68+652+14+23,fromx:300,fromy:820}];
+  let shown=false;
+  for(const tp of taps){
+    const a=seg(t,tp.t-320,tp.t), d=seg(t,tp.t,tp.t+380);
+    if(t>tp.t-320&&t<tp.t+380){shown=true;
+      const x=lerp(tp.fromx,tp.x,eOutC(a)), y=lerp(tp.fromy,tp.y,eOutC(a));
+      const s=t<tp.t?lerp(1.25,1,eOutC(a)):lerp(0.82,1.1,eOutC(d));
+      tf(tc,x-23,y-23,s,0,t<tp.t?eOutC(a)*0.95:(1-d)*0.95);
+      const rp=eOutC(d);tf(rg,tp.x-23,tp.y-23,1+rp*1.6,0,t>tp.t?(1-rp)*0.8:0);
+    }
+  }
+  if(!shown){tc.style.opacity=0;rg.style.opacity=0}
+}
+// ---------- payoff: mascot pops out of the screen, coins into the wallet, hero number ----------
+function hapState(t){
+  const r=$('uiHappy').getBoundingClientRect();
+  const p=seg(t,T.pop,T.pop+620);
+  const e=eInOutC(p);
+  const startS=r.width, startX=r.left+r.width/2, startB=r.top+r.height*0.97;
+  let S=lerp(startS,L.hap.s,eInOutC(p));
+  let X=lerp(startX,L.hap.x,eOutC(p));   // leaves the screen sideways first, then grows as it lands
+  let B=lerp(startB,L.hap.y,e)-Math.sin(Math.PI*p)*30*U;
+  let sx=1,sy=1,rot=(1-e)*8;
+  if(p>=1){const k=wob((t-T.pop-620)/1000,2.6,5);sy=1-0.14*k;sx=1+0.10*k}
+  else{sy=1+0.08*Math.sin(Math.PI*p);sx=1-0.05*Math.sin(Math.PI*p)}
+  const lastLand=COIN_ST(7)+COIN_DUR;
+  const hop=seg(t,lastLand,lastLand+420);B-=Math.sin(Math.PI*hop)*40*U;
+  // carried into the end card: glides + hops to the top of the lockup
+  const c=seg(t,T.exit[0],T.exit[0]+650), ce=eInOutC(c);
+  if(c>0){const E=L.end.hap;X=lerp(L.hap.x,E.x,ce);S=lerp(L.hap.s,E.s,ce);B=lerp(L.hap.y,E.y,ce)-Math.sin(Math.PI*c)*140*U;rot=-6*Math.sin(Math.PI*c);sx=1;sy=1+0.06*Math.sin(Math.PI*c)}
+  if(c>=1){const k=wob((t-T.exit[0]-650)/1000,2.4,5);sy=1-0.10*k;sx=1+0.07*k;
+    const idle=Math.sin((t-T.exit[0]-650)/1000*2*Math.PI*0.75)*seg(t,T.exit[0]+900,T.exit[0]+1300);sy*=1+0.025*idle;sx*=1-0.015*idle;rot=2.5*Math.sin((t-T.exit[0])/1000*2*Math.PI*0.5)*seg(t,T.exit[0]+900,T.exit[0]+1400);B-=Math.max(0,idle)*10*U}
+  else if(t>T.pop+1100&&c<=0){const idle=Math.sin((t-T.pop-1100)/1000*2*Math.PI*0.9);sy*=1+0.02*idle;sx*=1-0.015*idle}
+  return {X,B,S,sx,sy,rot};
+}
+function renderPayoff(t){
+  const h=$('happy');
+  if(t<T.pop-10){h.style.opacity=0;}
+  else{const s=hapState(t);L.hapNow=s;
+    h.style.width=h.style.height=s.S+'px';
+    h.style.transform=`translate(${s.X-s.S/2}px,${s.B-s.S}px) rotate(${s.rot}deg) scale(${s.sx},${s.sy})`;h.style.opacity=1;
+    h.style.filter=t>T.exit[0]?`drop-shadow(0 ${24*U}px ${30*U}px rgba(28,58,42,.20))`:'none';}
+  // hero number: masked line reveal, counts as the coins land
+  const n=$('num');
+  if(t<T.num-20||t>T.exit[1]+50){n.style.visibility='hidden'}else{n.style.visibility='visible';
+    const a=eOutX(seg(t,T.num,T.num+650)), b=eOutX(seg(t,T.num+140,T.num+790));
+    $('numV').style.transform=`translateY(${(1-a)*110}%)`;n.querySelector('.l2 .in').style.transform=`translateY(${(1-b)*120}%)`;
+    const lastLand=COIN_ST(7)+COIN_DUR;
+    let landed=0;COINS.forEach(cn=>{landed+=eInOutC(seg(t,cn.st+80,cn.st+cn.dur+40))});
+    const v=0.002+0.0448*landed/COINS.length;
+    $('numV').innerHTML='+'+v.toFixed(4)+'<i>SOL</i>';
+    const kk=wob((t-lastLand)/1000,3,6)*(t>lastLand?1:0);
+    let bump=0;COINS.forEach(cn=>{const q=seg(t,cn.st+cn.dur,cn.st+cn.dur+200);bump=Math.max(bump,Math.sin(Math.PI*q))});
+    $('numWal').style.transform=`scale(${1+0.18*bump+0.06*kk})`;
+    n.querySelector('.l1').style.transform=`scale(${1+0.035*kk})`;n.querySelector('.l1').style.transformOrigin='0 70%';
+  }
+  // coins (with velocity ghosts = motion blur), launched from the check slot
+  const src=$('uiCheck').getBoundingClientRect();
+  const sx0=src.left+src.width/2, sy0=src.top+src.height/2;
+  const tx=L.numWal.x, ty=L.numWal.y;
+  COINS.forEach((cn,i)=>{
+    const pos=tt=>{const p=seg(tt,cn.st,cn.st+cn.dur);const e=eInOutC(p);
+      const pl=L.phNow?L.phNow.cx-211*L.phNow.k:sx0;
+      const mx=Math.min(pl-(MODE==='port'?260:140)*U,tx-40*U)+cn.dx*U, my=sy0-(MODE==='port'?100:60)*U-cn.arc*0.3*U;
+      return [(1-e)*(1-e)*sx0+2*(1-e)*e*mx+e*e*tx,(1-e)*(1-e)*sy0+2*(1-e)*e*my+e*e*ty,p]};
+    cn.els.forEach((el,g)=>{const [x,y,p]=pos(t-g*22);
+      if(p<=0||p>=1){el.style.opacity=0;return}
+      const s=U*1.05*(p<.15?eOutBack(p/.15):lerp(1,.6,seg(p,.8,1)));
+      tf(el,x-28,y-28,s,p*420,g===0?1:0.32/g)});
+  });
+  // sparkles
+  const lastLand=COIN_ST(7)+COIN_DUR;
+  SPARKS.forEach((s,i)=>{let op=0,x=0,y=0,sc=0,r=0;
+    if(i<8){const p=seg(t,lastLand-80,lastLand+700);if(p>0&&p<1&&t<T.exit[0]+100){x=tx+Math.cos(s.a)*110*U*s.r*eOutC(p)*1.5;y=ty+(0.35+0.65*Math.abs(Math.sin(s.a)))*95*U*s.r*eOutC(p)*1.5;sc=s.s*Math.sin(Math.PI*p)*U*1.6;op=1;r=p*140}}
+    else if(i<16){const st=T.pop+400+(i-8)*90;const p=t-st;
+      if(p>0&&L.hapNow){const H=L.hapNow;x=H.X+Math.cos(s.a)*H.S*0.62*s.r;y=H.B-H.S*0.5+Math.sin(s.a)*H.S*0.5*s.r;const tw=0.5+0.5*Math.sin(p/1000*5+s.ph);sc=s.s*(0.4+0.6*tw)*eOutBack(seg(p,0,350))*U*1.3;op=1;r=p/1000*40}}
+    else if(i>=22&&i<30){ // gold glints round the value coin on the 4.5 / 5.0 beats
+      const st=(i<26?4480:4980)+(i%4)*40;const p=seg(t,st,st+650);
+      if(p>0&&p<1&&t<T.whip[0]&&L.vCoin){const C=L.vCoin;x=C.x+Math.cos(s.a)*C.s*(0.55+0.55*eOutC(p));y=C.y+Math.sin(s.a)*C.s*(0.55+0.55*eOutC(p));sc=s.s*Math.sin(Math.PI*p)*U*1.6;op=1;r=p*120}}
+    else if(i>=30){ // hero-card SOL glints on the 4.0 beat
+      const st=T.wave[0]+(i-30)*50;const p=seg(t,st,st+600);
+      if(p>0&&p<1&&L.solR){x=L.solR.x+Math.cos(s.a)*L.solR.w*0.75*(0.6+0.6*eOutC(p));y=L.solR.y+Math.sin(s.a)*L.solR.w*0.45*(0.6+0.6*eOutC(p));sc=s.s*Math.sin(Math.PI*p)*U*1.4;op=1;r=p*120}}
+    else{ // end-card twinkles round the lockup
+      const st=T.endIn+700+(i-16)*130;const p=t-st;
+      if(p>0){const R=L.end.row;const ang=s.a;const cx=VW/2, cy=(L.end.head.y+R.y+R.h)/2;x=cx+Math.cos(ang)*Math.max(R.w*0.62,$('tEnd').offsetWidth*0.58);y=cy+Math.sin(ang)*(R.y+R.h-L.end.head.y)*0.68;const tw=0.5+0.5*Math.sin(p/1000*4.5+s.ph);sc=s.s*(0.45+0.55*tw)*eOutBack(seg(p,0,400))*U*1.2;op=1;r=p/1000*30}}
+    tf(s.el,x-20,y-20,sc,r,op)});
+}
+// ---------- badges ----------
+function renderBadges(t){
+  [['b1',T.b1],['b2',T.b2],['b3',T.b3]].forEach(([id,t0],i)=>{
+    const b=$(id);const p=seg(t,t0,t0+560), o=seg(t,T.bOut+i*40,T.bOut+i*40+200);
+    if(p<=0||o>=1){b.style.opacity=0;return}
+    const e=eOutX(p);
+    const x=L.badges.x-(1-e)*40*U-eInC(o)*40*U, y=L.badges.y+i*L.badges.gap+(1-e)*24*U;
+    b.style.transform=`translate(${x}px,${y}px) scale(${U*(0.94+0.06*eOutBack(p,1.8))})`;
+    b.style.opacity=clamp(p*2.2)*(1-eInC(o));
+    const sw=seg(t,t0+180,t0+900);b.querySelector('.bs').style.transform=`translateX(${lerp(-160,820,eInOutC(sw))}px) skewX(-20deg)`;b.querySelector('.bs').style.opacity=sw>0&&sw<1?1:0;
+  });
+}
+// ---------- end card ----------
+function renderEnd(t){
+  const g=$('endG'),ring=$('endRing');
+  if(t<T.exit[0]){g.style.display='none';ring.style.opacity=0;return}g.style.display='block';
+  // circular reveal that blooms out from behind the celebrating mascot
+  const cx=L.hap.x, cy=L.hap.y-L.hap.s*0.55;
+  const R=Math.hypot(Math.max(cx,VW-cx),Math.max(cy,VH-cy))+20*U;
+  const rp=seg(t,...T.exit), r=R*eOutC(rp)*(rp>0?1:0)+(rp>0?1:0);
+  g.style.clipPath=rp>=1?'none':`circle(${r.toFixed(1)}px at ${cx}px ${cy}px)`;
+  ring.style.width=ring.style.height=2*r+'px';ring.style.transform=`translate(${cx-r}px,${cy-r}px)`;ring.style.opacity=rp>0&&rp<1?(1-rp)*0.9:0;
+  ring.style.borderWidth=Math.max(2,10*U*(1-rp))+'px';
+  const E=L.end;
+  const drift=(1-eOutC(seg(t,T.exit[0],T.exit[1]+700)))*30*U;
+  // rays + glow behind the mascot
+  const ry=$('rays');const rs=E.raysS;const hy=E.hap.y-E.hap.s*0.5;
+  ry.style.transform=`translate(${VW/2-rs/2}px,${hy-rs/2}px) rotate(${(t-12000)/1000*7}deg) scale(${lerp(.7,1,eOutC(seg(t,T.exit[0]+150,T.exit[1]+500)))})`;
+  ry.style.opacity=0.95*eOutC(seg(t,T.exit[0]+200,T.exit[1]+400));
+  $('endGlow').style.transform=`translate(${VW/2-E.glowW/2}px,${hy-E.glowW*0.4}px) scale(${0.8+0.2*eOutC(seg(t,T.exit[0],T.exit[1]))})`;$('endGlow').style.opacity=0.85;
+  const te=$('tEnd');te.style.left=E.head.x+'px';te.style.top=(E.head.y+drift*0.6)+'px';
+  animKT(te,t,T.endIn+80,1e9,{stagger:55,lineDelay:80,hlOff:240});
+  const rp2=seg(t,T.endIn+380,T.endIn+880);
+  const row=$('endRow');row.style.transform=`translate(${E.row.x}px,${E.row.y+drift*0.4+(1-eOutBack(rp2,1.4))*36*U}px)`;row.style.opacity=clamp(rp2*1.6);
+  const sp=seg(t,T.endIn+420,T.endIn+1000);
+  tf($('endSub'),E.sub.x,E.sub.y+drift*0.3+(1-eOutC(sp))*20*U,1,0,eOutC(sp));
+  // logo shine (13.5 s) and handle shine (13.75 s)
+  const ls=eInOutC(seg(t,13450,14150));const bx=lerp(-40,140,ls);
+  $('logoSh').style.clipPath=`polygon(${bx}% 0,${bx+14}% 0,${bx+4}% 100%,${bx-10}% 100%)`;$('logoSh').style.opacity=ls>0&&ls<1?0.9:0;
+  const hs=seg(t,13700,14350);$('hShine').style.transform=`translateX(${lerp(-140*U,$('endHandle').offsetWidth+40*U,eInOutC(hs))}px) skewX(-20deg)`;$('hShine').style.opacity=hs>0&&hs<1?1:0;
+}
+// ---------- background ----------
+function renderBG(t){
+  const cz=t<T.whip[1]?camZ(t):0;
+  const wx=t<T.whip[1]+400?whipX(Math.min(t,T.whip[1]))*0.15:-VW*1.1*0.15;
+  [...$('blobs').children].forEach((b,i)=>{const x=+b.dataset.x+Math.sin(t/1000*0.25+i*1.7)*40*U+wx*(0.5+i*0.2), y=+b.dataset.y+Math.cos(t/1000*0.2+i)*30*U;
+    b.style.transform=`translate(${x}px,${y}px) scale(${1+cz/4000})`});
+  // film grain: seeded jitter at 12 fps
+  const k=Math.floor(Math.max(0,t)/83);const r=rng(k*7919+3);$('grain').style.backgroundPosition=`${Math.floor(r()*160)}px ${Math.floor(r()*160)}px`;
+}
 
 function seek(ms){
+  if(!L.ready)layout();
   const t=ms;
-  // ---- scene 1: pile ----
-  const pe=eInOutC(seg(t,...T.pan));const pan=lerp(0,PAN,pe), psc=lerp(PSC0,PSC1,pe);
-  pile.style.transformOrigin='549px 990px';
-  pile.style.transform=`translateX(${pan}px) scale(${psc})`;
-  const PX=lx=>PXf(lx,psc,pan), PY=ly=>PYf(ly,psc);
-  BL.forEach((b,i)=>{
-    const a=T.pileIn[0]+b.delay, land=a+430;
-    let y=b.y, x=b.x, rot=b.r, sx=1, sy=1, op=1;
-    if(t<land){const p=seg(t,a,land);y=b.y-(1-p*p)*Math.max(130,Math.min(420,b.y-400));rot=b.r-14*(1-p);op=t<a?0:eOutC(clamp(p/0.45))}
-    else{const k=wob((t-land)/1000,3.2,7);sy=1-0.16*k;sx=1+0.12*k}
-    const nud=wob((t-T.mopiIn[1])/1000,4,8)*(t>T.mopiIn[1]?1:0); rot+=nud*3*(i%2?1:-1);
-    if(t>b.st){const u=(t-b.st)/1000;x+=b.fx*u;y+=b.fvy*u+1500*u*u;rot+=b.frot*u;op=clamp(1-(u-0.35)/0.35);sx*=1-0.25*clamp(u*2);sy=sx}
-    S(b.el,x,y,sx,sy,rot,op);
-    // glint (SOL shimmer) in scene 1
-    if(b.gt!==null){const g=seg(t,b.gt,b.gt+620);const gs=g<=0||g>=1?0:Math.sin(Math.PI*g)*(1+0.15*Math.sin(g*12));b.gl.style.transform=`scale(${gs}) rotate(${g*90}deg)`}
-    // check badge
-    const ct=T.scan[0]+((b.x-180)/570)*800;
-    const cp=seg(t,ct,ct+380); b.chk.style.transform=`scale(${cp<=0?0:eOutBack(cp,2.4)})`;
-    if(b.tagEl){
-      const tp=seg(t,T.tags[0]+i*40,T.tags[0]+i*40+420);
-      const tk=wob((t-(T.tags[0]+i*40+420))/1000,2.6,5);
-      const hide=eInC(seg(t,b.st-200,b.st-40)); // pop away just before the band reaches it
-      const s=(tp<=0?0:eOutBack(tp,2))*(1-hide);
-      b.tagEl.style.transform=`rotate(${b.tr+(t>T.tags[0]+i*40+420?tk*6:0)}deg) scale(${s})`;
-      b.tagEl.style.opacity=tp>0&&hide<1?1:0;
-      const found=t>ct; b.tagEl.style.borderColor=found?'#74b18c':'#e6dcc0'; b.dot.style.background=found?'#74b18c':'#d9c79f';
-    }
-  });
-
-  // ---- mopi (hero) ----
-  const m=$('mopi');
-  let mx=-640,my=MOPI_Y,msx=1,msy=1,mrot=0,mop=1;
-  const M0=T.mopiIn[0],M1=T.mopiIn[1];
-  if(t>=M0){
-    // hops: [start,end,x0,x1,height,y0]; landscape rises from below the frame instead of crossing the text column
-    const hops=LAND
-      ?[[M0,M0+520,40,20,0,700],[M0+520,M0+860,20,8,120,0],[M0+860,M1,8,0,70,0]]
-      :[[M0,M0+430,-430,-260,115,0],[M0+430,M0+820,-260,-110,100,0],[M0+820,M1,-110,0,70,0]];
-    mx=0;
-    for(const [a,b,x0,x1,h,y0] of hops){
-      if(t>=a&&t<b){const p=(t-a)/(b-a);mx=lerp(x0,x1,p);
-        if(y0){my=MOPI_Y+lerp(y0,0,p)-170*4*p*(1-p)*1.0;}else my=MOPI_Y-h*4*p*(1-p);
-        const st=Math.sin(Math.PI*p);msy=1+0.10*st;msx=1-0.07*st;mrot=lerp(-8,6,p);
-        if(!y0&&p<.12){const q=1-p/.12;msy=1-0.13*q;msx=1+0.10*q}
-        break}
-    }
-    if(t>=M1){mx=0;const k=wob((t-M1)/1000,2.6,5.5);msy=1-0.16*k;msx=1+0.12*k;mrot=0}
-    for(const h of hops.slice(0,2)){const b=h[1];const k=wob((t-b)/1000,5,25);if(t>=b&&t<b+120){msy=Math.min(msy,1-0.12*k)}}
-    const lean=eInOutC(seg(t,3300,3800))*(1-eInOutC(seg(t,5100,5500)));mrot+=lean*3;
-    // idle breathing between landing and sweep so held frames never freeze
-    if(t>=M1+500&&t<T.sweep[0]){const ib=seg(t,M1+500,M1+900)*(1-seg(t,T.sweep[0]-200,T.sweep[0]));const ph=Math.sin((t-M1)/1000*2*Math.PI*0.85);msy*=1+0.018*ph*ib;msx*=1-0.012*ph*ib;mrot+=Math.sin((t-M1)/1000*2*Math.PI*0.42)*1.6*ib}
-    if(t>=T.sweep[0]){
-      const p=seg(t,...T.sweep);mx=lerp(0,SWX,eInOutC(p));
-      const br=Math.sin((t-T.sweep[0])/1000*2*Math.PI*3.2)*(p<1?1:0)*(1-p*.4);
-      mrot=br*4.5; msy=1-0.04*Math.abs(br); msx=1+0.03*Math.abs(br);
-      my=MOPI_Y-Math.abs(Math.sin((t-T.sweep[0])/1000*Math.PI*3.2))*14*(p<1?1:0);
-    }
-    if(t>=HAPPY-120){const q=seg(t,HAPPY-120,HAPPY);msy=1-0.14*q;msx=1+0.1*q;mop=t>=HAPPY?0:1}
-  } else mop=0;
-  S(m,mx,my,msx,msy,mrot,mop);
-
-  // ---- happy mopi ----
-  {
-    const px=SWX+CW/2, pb=1012;
-    let hx=px, hb=pb, size=HSZ, sx=1, sy=1, op=0;
-    if(t>=HAPPY){
-      op=1;const k=wob((t-HAPPY)/1000,2.4,4.5);sy=1+0.16*k;sx=1-0.10*k;
-      const e=eInOutC(seg(t,...T.glide));
-      hx=lerp(px,ENDX,e);hb=lerp(pb,456,e);size=lerp(HSZ,420,e);
-      if(t>T.glide[1]){const bob=Math.sin((t-T.glide[1])/1000*Math.PI*1.3);hb+=-bob*6;sy=1+bob*0.02;sx=1-bob*0.015}
-    }
-    const sc=size/HSZ;
-    S(happyEl,hx-HSZ/2,hb-HSZ*0.92,sx*sc,sy*sc,0,op);
-  }
-
-  // ---- captions ----
-  caption($('cap1'),t,...T.cap1);
-  caption($('cap2'),t,...T.cap2);
-  caption($('cap3'),t,...T.cap3);
-
-  // ---- chip ----
-  {const p=seg(t,T.chip[0],T.chip[0]+450),o=seg(t,T.chip[1]-280,T.chip[1]);
-   S($('chip'),0,(1-eOutBack(p,1.6))*30-eInC(o)*20,lerp(.85,1,eOutBack(p,1.6)),undefined,0,p*(1-o));}
-
-  // ---- brand tag ----
-  {const o=eOutC(seg(t,T.endOut[0],T.endOut[1]));S($('brand'),0,-o*20,1,1,0,1-o);}
-
-  // ---- preview card ----
-  {
-    const card=$('card');const p=seg(t,...T.card);
-    let sc=t<T.card[0]?0:eOutBack(p,1.5), op=p>0?1:0, tx=0, ty=(1-eOutC(p))*60;
-    if(t>T.press&&t<T.press+260){const q=seg(t,T.press,T.press+260);sc*=1-0.025*Math.sin(Math.PI*q)}
-    const out=eInOutC(seg(t,...T.cardOut));
-    if(out>0){ // shrink + fly into the (already visible) wallet; gone before it is tiny
-      const ox=478+584*0.85, oy=338+58;
-      sc=lerp(1,0.3,out);tx=lerp(0,WAL.x-ox,out);ty=lerp(0,WAL.y-oy,out)-Math.sin(Math.PI*out)*40;op=1-seg(out,0.3,0.78)}
-    S(card,tx,ty,sc,sc,0,op);
-    // rows reveal + count-up
-    const R=[['r1','v1',0.0489,''],['r2','v2',0.0001,'−'],['r3','v3',0.0020,'−'],['r4','v4',0.0468,''],['r5',null]];
-    R.forEach(([rid,vid,val,pre],k)=>{const a=T.rows[0]+k*90;const q=eOutC(seg(t,a,a+380));const row=$(rid);row.style.opacity=q;row.style.transform=`translateY(${(1-q)*16}px)`;
-      if(vid){const c=eOutC(seg(t,a+60,a+(k===3?520:420)));$(vid).textContent=pre+fmt(val*c)}});
-    const btn=$('btn');const bp=seg(t,T.press,T.press+200);
-    btn.style.transform=`scale(${1-0.05*Math.sin(Math.PI*bp)})`;
-    const done=t>T.press+140;
-    btn.style.background=done?'#2e6a4d':'#17201c';
-    $('lblA').style.opacity=done?0:1;$('lblB').style.opacity=done?1:0;
-    $('bchk').style.strokeDashoffset=1-eOutC(seg(t,T.press+160,T.press+460));
-    const rp=seg(t,T.press,T.press+500);$('ripple').style.transform=`scale(${rp>0?rp*22:0})`;$('ripple').style.opacity=1-rp;
-    // tap indicator
-    const tap=$('tap');const ta=seg(t,T.press-500,T.press-80),tb=seg(t,T.press,T.press+350);
-    const bx=478+292, by=338+560;
-    const tx2=lerp(bx+150,bx+40,eOutC(ta)),ty2=lerp(by+150,by-8,eOutC(ta));
-    const tsc=t<T.press?lerp(1.2,1,ta):lerp(.85,1.5,tb);
-    S(tap,tx2-39,ty2-39,tsc,tsc,0,ta>0?(t<T.press?eOutC(ta)*0.95:(1-tb)*0.95):0);
-  }
-
-  // ---- wallet + counter ----
-  {
-    const w=$('wallet');const p=seg(t,...T.walletIn);
-    let bump=0;coins.forEach(c=>{const ar=c.st+c.dur;if(t>ar)bump+=wob((t-ar)/1000,4,14)*0.10});
-    // gulp when the card arrives
-    const gulp=wob((t-T.cardOut[1])/1000,3.5,9)*(t>T.cardOut[1]?0.12:0);
-    const o=eOutC(seg(t,...T.endOut));
-    const sc=(p<=0?0:eOutBack(p,2))*(1+bump+gulp);
-    S(w,0,-o*30,sc,sc,0,(p>0?1:0)*(1-o));
-    let arrived=0;coins.forEach(c=>{arrived+=clamp((t-(c.st+c.dur))/120)});
-    $('cval').textContent='+'+fmt(0.0468*arrived/coins.length);
-    const firstAr=coins[0].st+coins[0].dur;const cp=seg(t,firstAr,firstAr+300);
-    const kk=wob((t-FIN-120)/1000,3,6)*(t>FIN+120?1:0);
-    const cv=$('counter').firstChild;
-    const csc=(cp<=0?0:eOutBack(cp,1.8))*(1+0.12*kk);
-    S($('counter'),0,-o*30,1,1,0,(cp>0?1:0)*(1-o));
-    cv.style.transform=`scale(${csc})`;
-    cv.style.background=t>FIN+120?'#e4f2e9':'#fff';
-  }
-
-  // ---- coins ----
-  coins.forEach(c=>{
-    const b=c.b; const p=seg(t,c.st,c.st+c.dur);
-    if(p<=0||p>=1){c.el.style.opacity=0;return}
-    const sx0=PX(b.x+85), sy0=PY(b.y+40);
-    const cx=lerp(sx0,WAL.x,.5), cy=Math.min(sy0,WAL.y)-230-(c.i%3)*40;
-    const e=eInOutC(p);
-    const x=(1-e)*(1-e)*sx0+2*(1-e)*e*cx+e*e*WAL.x;
-    const y=(1-e)*(1-e)*sy0+2*(1-e)*e*cy+e*e*WAL.y;
-    const sc=p<.15?eOutBack(p/.15):lerp(1,.6,seg(p,.75,1));
-    S(c.el,x-29,y-29,sc,sc,p*540,1);
-  });
-
-  // ---- sparkles: burst at wallet + twinkles around happy mopi ----
-  sparks.forEach((s,i)=>{
-    let op=0,x=0,y=0,sc=0,rot=0;
-    if(i<7){
-      const p=seg(t,FIN+60,FIN+900);if(p>0&&p<1){x=WAL.x+Math.cos(s.a)*s.d*eOutC(p);y=WAL.y+40+Math.sin(s.a)*s.d*eOutC(p)*.8;sc=s.sz*Math.sin(Math.PI*p);op=1;rot=p*120}
-    }else{
-      const st=HAPPY+80+(i-7)*110;const p=t-st;
-      if(p>0){const e=eInOutC(seg(t,...T.glide));const bx=lerp(SWX+CW/2,ENDX,e),by=lerp(690,265,e),r=lerp(300,250,e);
-        x=bx+Math.cos(s.a)*r; y=by+Math.sin(s.a)*r*.8;
-        const tw=0.5+0.5*Math.sin(p/1000*Math.PI*2*0.9+i);sc=s.sz*(0.4+0.6*tw)*eOutBack(seg(p,0,350));op=1;rot=p/1000*40}
-    }
-    S(s.el,x-22,y-22,sc,sc,rot,op);
-  });
-
-  // ---- sweep band + broom swish + dust ----
-  {
-    const bp=seg(t,W0,W1);const band=$('band');
-    if(bp>0&&bp<1){const x=BX(t);band.style.opacity=clamp(bp*8)*(1-seg(bp,.82,1));band.style.transform=`translateX(${x-460}px)`}
-    else band.style.opacity=0;
-    const p=seg(t,...T.sweep);const on=p>0&&p<1;
-    const hx=mx+268, hy=MOPI_Y+505;
-    const ph=((t-T.sweep[0])/1000*3.2)%1;
-    [0,1,2].forEach(i=>{const el=$('sw'+i);
-      if(!on){el.style.opacity=0;return}
-      const q=clamp((ph-i*0.06)/0.85);
-      const len=150+i*30, up=50+i*38;
-      el.setAttribute('d',`M${hx-10} ${hy+8+i*4} Q ${hx+len*0.55} ${hy+26} ${hx+len} ${hy-up}`);
-      el.style.strokeDasharray='100 100';el.style.strokeDashoffset=100-100*eOutC(clamp(q*1.8));
-      el.style.opacity=(q>0?1:0)*(1-eInC(seg(q,.45,1)))*(1-seg(t,T.sweep[1]-250,T.sweep[1]));});
-    $('dust').querySelectorAll('circle').forEach((c,j)=>{
-      const k=Math.floor(j/3), born=T.sweep[0]+k*1000/3.2, age=(t-born)/1000;
-      if(age<0||age>0.6||t>T.sweep[1]){c.setAttribute('r',0);return}
-      const bx=lerp(0,SWX,eInOutC(seg(born,...T.sweep)))+268+40;
-      const ang=-0.3-(j%3)*0.45;
-      c.setAttribute('cx',bx+Math.cos(ang)*120*eOutC(age/0.6)+(j%3)*10);
-      c.setAttribute('cy',hy+Math.sin(ang)*90*eOutC(age/0.6));
-      c.setAttribute('r',(10+(j%3)*5)*(1-age/0.6));
-    });
-  }
-
-  // ---- end card ----
-  {
-    const bg=eInOutC(seg(t,T.endOut[0]-100,T.endOut[1]+150));$('endbg').style.opacity=bg;$('floor').style.opacity=1-bg;$('dots').style.opacity=.75*(1-bg*.6);
-    const l=$('endHead').querySelectorAll('.l');
-    l.forEach((el,i)=>{const p=eOutC(seg(t,T.end[0]+i*170,T.end[0]+i*170+520));el.style.transform=`translateY(${(1-p)*50}px)`;el.style.opacity=p});
-    $('endHead').style.opacity=t>T.end[0]?1:0;
-    const r=seg(t,T.end[0]+500,T.end[0]+1000);S($('endRow'),0,(1-eOutBack(r,1.4))*40,1,1,0,r);
-    const s2=seg(t,T.end[0]+800,T.end[0]+1300);S($('endSub'),0,(1-eOutC(s2))*20,1,1,0,s2);
-  }
+  renderBG(t);
+  renderCards(t);
+  renderFG(t);
+  renderValFX(t);
+  renderLap(t);
+  renderWave(t);
+  renderPhone(t);
+  renderPayoff(t);
+  renderBadges(t);
+  const hl=MODE==='land'?[-700,120,620]:[-700,250];
+  animKT($('tHook'),t,T.hookIn,T.hookOut,{stagger:80,lines:hl});
+  animKT($('tValue'),t,T.valIn,T.valOut,{stagger:85,lineDelay:150});
+  animKT($('tFind'),t,T.findIn,T.findOut,{stagger:90,lineDelay:150});
+  renderEnd(t);
 }
 window.seek=seek;
-window.__events=()=>({FIN,HAPPY,coins:coins.map(c=>[c.st,c.st+c.dur]),blocks:BL.map(b=>b.st),lands:BL.map(b=>T.pileIn[0]+b.delay+430),scan:BL.map(b=>T.scan[0]+((b.x-180)/570)*800),tags:BL.map((b,i)=>b.tag?T.tags[0]+i*40:null).filter(v=>v!==null),glints:BL.filter(b=>b.gt!==null).map(b=>b.gt),T,W0,W1,LAND,D:window.DURATION_MS});
-seek(0);
+window.__T=T;
+window.__EV=()=>({MODE,coinsLand:COINS.map(c=>c.st+c.dur),coinsStart:COINS.map(c=>c.st)});
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(!L.ready)seek(0)});
 </script>
 </body>
 </html>
