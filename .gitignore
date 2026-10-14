@@ -10,3 +10,6 @@ playwright-report
 .vite
 *.tsbuildinfo
 .DS_Store
+
+# Agent worktrees (temporary)
+.claude/worktrees/
